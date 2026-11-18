@@ -2712,8 +2712,8 @@ function fmtLocalDay(dateStr){
   const date = localDayStart(dateStr);
   return date ? date.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'short', year:'numeric' }) : dateStr;
 }
-function appointmentDurationMinutes(b){
-  const minutes = Number(b?.appointment_duration_min ?? b?.service?.duration_min);
+function appointmentDurationMinutes(b, forScheduling = false){
+  const snapshot = Number(b?.appointment_duration_min); const service = Number(b?.service?.duration_min); const minutes = forScheduling ? service : snapshot;
   return Number.isFinite(minutes) && minutes >= 5 ? minutes : 60;
 }
 function appointmentIntervalsOverlap(startA, durationA, startB, durationB){
@@ -6406,7 +6406,7 @@ async function onSubmitSchedule(e){
     fieldError($('#sc-datetime'), 'Couldn’t confirm availability. Please try again.');
     return;
   }
-  const duration = appointmentDurationMinutes(b);
+  const duration = appointmentDurationMinutes(b, true);
   const conflict = (slots.data || []).find(slot => slot.id !== b.id && appointmentIntervalsOverlap(d.toISOString(), duration, slot.scheduled_at, appointmentDurationMinutes(slot)));
   if (conflict){
     const conflictTime = fmtTime(toLocalInput(conflict.scheduled_at).slice(11,16));
