@@ -2428,7 +2428,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 <div id="toasts" role="status" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.js"></script>
 <script>
 (() => {
 'use strict';
@@ -2768,12 +2768,12 @@ function ensureQRLib(){
     QR_LIB.status = 'ready';
     return Promise.resolve();
   }
-  if (QR_LIB.status === 'failed') return Promise.reject(new Error('QR library unavailable'));
+
   if (QR_LIB.promise) return QR_LIB.promise;
   QR_LIB.status = 'loading';
   QR_LIB.promise = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+    s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.js';
     s.async = true;
     s.onload = () => {
       if (window.QRCode && typeof window.QRCode.toDataURL === 'function'){ QR_LIB.status = 'ready'; resolve(); }
