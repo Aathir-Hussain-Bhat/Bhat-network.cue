@@ -2443,7 +2443,7 @@ const S = {
   adminWsDetail: null, adminWsLoading: null,
   admAction: null,
   workshops: null, workshopsLoading: false, workshopsKey: '',
-  shopDetail: null, shopAnon: null, shopAnonLoading: null,
+  shopDetail: null, shopDetailLoading: null, shopAnon: null, shopAnonLoading: null,
   wq: { term: '', cat: '', verified: false, openNow: false },
   location: null, locState: 'idle',
   qIssue: '', qVehicle: '', qShop: '',
@@ -3471,7 +3471,7 @@ function resetState(){
   S.adminWsDetail = null; S.adminWsLoading = null;
   S.admAction = null;
   S.workshops = null; S.workshopsLoading = false; S.workshopsKey = '';
-  S.shopDetail = null; S.shopAnon = null; S.shopAnonLoading = null;
+  S.shopDetail = null; S.shopDetailLoading = null; S.shopAnon = null; S.shopAnonLoading = null;
   S.location = null; S.locState = 'idle';
   S.wq = { term: '', cat: '', verified: false, openNow: false };
   S.qIssue = ''; S.qVehicle = ''; S.qShop = ''; S.bookShopW = null;
@@ -4478,27 +4478,34 @@ function screenShopDetail(id){
 }
 
 async function loadShopDetail(id){
-  let res;
-  if (S.user){
-    res = await DB.workshops.get(id);
+  if (S.shopDetailLoading?.id === id) return;
+  const request = { id, userId: S.user?.id || null };
+  S.shopDetailLoading = request;
+  try {
+    const res = request.userId
+      ? await DB.workshops.get(id)
+      : await DB.publicApi.workshop(id);
+    if (S.shopDetailLoading !== request || (S.user?.id || null) !== request.userId) return;
     if (res.error || !res.data){
-      if (res.error) console.error('[BHAT] shop', res.error);
+      if (res.error) console.warn('[BHAT] shop detail', res.error);
       S.shopDetail = { id, missing: true };
-    } else {
+    } else if (request.userId){
       S.shopDetail = res.data;
       if (S.location) S.shopDetail.dist = haversine(S.location, S.shopDetail);
+    } else {
+      S.shopDetail = { ...res.data, id, services: res.data.services || [], hours: res.data.hours || [] };
     }
-    applyRoute();
-    return;
+  } catch (err){
+    if (S.shopDetailLoading === request){
+      console.warn('[BHAT] shop detail', err);
+      S.shopDetail = { id, missing: true };
+    }
+  } finally {
+    if (S.shopDetailLoading === request){
+      S.shopDetailLoading = null;
+      if (parseHash().name === 'shop' && parseHash().param === id) applyRoute();
+    }
   }
-  res = await DB.publicApi.workshop(id);
-  if (res.error || !res.data){
-    if (res.error) console.warn('[BHAT] public shop', res.error);
-    S.shopDetail = { id, missing: true };
-  } else {
-    S.shopDetail = { ...res.data, id, services: res.data.services || [], hours: res.data.hours || [] };
-  }
-  applyRoute();
 }
 
 function openBookingSheet(id){
@@ -6337,7 +6344,13 @@ async function saveWorkshopImage(){
     const pub = sb.storage.from('workshop-photos').getPublicUrl(path);
     const upd = await DB.workshops.update(S.workshop.id, { photo_url: pub.data.publicUrl });
     if (upd.error) throw upd.error;
-    S.workshop = { ...S.workshop, photo_url: upd.data.photo_url };
+    const workshopId = S.workshop.id;
+    const photoUrl = upd.data.photo_url;
+    S.workshop = { ...S.workshop, photo_url: photoUrl };
+    if (Array.isArray(S.workshops))
+      S.workshops = S.workshops.map(w => w.id === workshopId ? { ...w, photo_url: photoUrl } : w);
+    if (S.shopDetail?.id === workshopId)
+      S.shopDetail = { ...S.shopDetail, photo_url: photoUrl };
     URL.revokeObjectURL(S.imgDraft.url);
     S.imgDraft = null;
     renderImgBlock();
@@ -6352,7 +6365,12 @@ async function removeWorkshopImage(){
   try {
     const upd = await DB.workshops.update(S.workshop.id, { photo_url: null });
     if (upd.error) throw upd.error;
+    const workshopId = S.workshop.id;
     S.workshop = { ...S.workshop, photo_url: null };
+    if (Array.isArray(S.workshops))
+      S.workshops = S.workshops.map(w => w.id === workshopId ? { ...w, photo_url: null } : w);
+    if (S.shopDetail?.id === workshopId)
+      S.shopDetail = { ...S.shopDetail, photo_url: null };
     if (S.imgDraft){ URL.revokeObjectURL(S.imgDraft.url); S.imgDraft = null; }
     renderImgBlock();
     toast('Photo removed', 'success');
@@ -7310,6 +7328,8 @@ function applyRoute(){
   if (routeKey !== lastRouteKey){
     window.scrollTo(0, 0);
     lastRouteKey = routeKey;
+    if (name === 'nearby' && S.workshops !== null) loadWorkshops(true);
+    if (name === 'shop' && param) loadShopDetail(param);
   }
   if (!openOverlays.length) document.body.classList.remove('no-scroll');
 }
