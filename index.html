@@ -1657,6 +1657,17 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
             <p class="ws-form-note">Verification is reviewed by BHAT NETWORK and can&rsquo;t be changed here. Coordinates help customers find and sort your workshop by distance.</p>
           </div>
         </form>
+        <form id="form-receipt-settings" class="card" style="padding:20px;margin-top:16px" hidden>
+          <h3>Personal receipt message</h3>
+          <p class="hint" style="margin:8px 0">This message appears on receipts for future completed services. It is private to your workshop and each customer.</p>
+          <div class="field">
+            <label for="receipt-message">Message from your workshop</label>
+            <textarea id="receipt-message" maxlength="1000" rows="4" placeholder="Thank you for choosing our workshop."></textarea>
+            <span class="field-error" aria-live="polite"></span>
+          </div>
+          <div class="form-actions"><button class="btn btn-primary" id="receipt-message-save" type="submit">Save receipt message</button></div>
+          <p class="hint">Leave blank to use a thank-you message with your workshop&rsquo;s name. Existing receipts do not change.</p>
+        </form>
       </div>
 
       <div id="tab-services" hidden>
@@ -2316,6 +2327,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
         <div class="field">
           <label for="rc-name">Service name</label>
           <input id="rc-name" type="text" maxlength="120" placeholder="e.g. General service">
+          <p class="hint">The service name, category and date can appear on existing public QR records. Don&rsquo;t enter customer details here.</p>
           <span class="field-error" aria-live="polite"></span>
         </div>
         <div class="form-grid two">
@@ -2461,9 +2473,9 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 </div>
 
 <div id="toasts" role="status" aria-live="polite"></div>
-
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.js"></script>
+<script src="receipt.js"></script>
 <script>
 (() => {
 'use strict';
@@ -2471,7 +2483,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 const SUPABASE_URL = 'https://hmbpikrgbgtgdmciwmpz.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_LbdWJxql3krR-1e7S9M6rw_385QpWxz';
 const APP_LOGO = 'https://res.cloudinary.com/prjgzqvy/image/upload/v1791482355/file_000000004eb861f79937c93d00e0ffe8_zyxoxf.png';
-const APP_VERSION = 'v0.12.3';
+const APP_VERSION = 'v0.13.0';
 
 const sb = window.supabase
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -2507,6 +2519,7 @@ const S = {
   listEditId: null, listImgDrafts: [], listUrlsWork: [],
   passportPub: null, passportPubLoading: null,
   recDetail: null, recDetailLoading: null,
+  receipt: null, receiptSettings: null,
   notifications: [], notifLoading: false, unread: 0,
   notifLoadedOnce: false, notifError: null, notifSeq: 0,
   admin: null, adminLoading: false,
@@ -3523,12 +3536,12 @@ const DB = {
       .select(`*, vehicle:vehicles(${VEH_COLS}),
                customer:profiles!service_records_customer_profile_id_fkey(${CUST_COLS}),
                member:profiles!service_records_member_profile_id_fkey(id,full_name),
-               workshop:workshops(id,name)`)
+               workshop:workshops(id,name), private_receipt:workshop_receipts(snapshot)`)
       .eq('workshop_id', wid)
       .order('created_at', { ascending: false })
       .limit(100),
     listForVehicle: vid => sb.from('service_records')
-      .select('*, workshop:workshops(id,name), member:profiles!service_records_member_profile_id_fkey(id,full_name)')
+      .select('*, workshop:workshops(id,name), member:profiles!service_records_member_profile_id_fkey(id,full_name), private_receipt:workshop_receipts(snapshot)')
       .eq('vehicle_id', vid)
       .order('record_date', { ascending: false })
       .limit(30),
@@ -3537,6 +3550,13 @@ const DB = {
       .eq('id', id)
       .maybeSingle(),
     create: row => sb.from('service_records').insert(row).select().single(),
+  },
+  receipts: {
+    complete: (bookingId, fields) => sb.rpc('complete_ready_booking', { p_booking: bookingId, p_fields: fields }),
+    forRecord: recordId => sb.from('workshop_receipts').select('id,service_record_id,snapshot').eq('service_record_id', recordId).maybeSingle(),
+    forBooking: bookingId => sb.from('workshop_receipts').select('service_record_id').eq('booking_id', bookingId).maybeSingle(),
+    settings: workshopId => sb.rpc('get_workshop_receipt_settings', { p_workshop: workshopId }),
+    saveSettings: (workshopId, message) => sb.rpc('set_workshop_receipt_message', { p_workshop: workshopId, p_message: message || null }),
   },
   updates: {
     create: row => sb.from('booking_updates').insert(row).select().single(),
@@ -3769,10 +3789,18 @@ async function loadWorkshopSpace(){
   if (bk.error){ toast(friendlyError(bk.error), 'error'); S.wBookings = []; }
   else S.wBookings = bk.data || [];
   if (rc.error){ toast(friendlyError(rc.error), 'error'); S.wRecords = []; }
-  else S.wRecords = rc.data || [];
+  else S.wRecords = (rc.data || []).map(withPrivateReceiptDetails);
   if (ls.error){ toast(friendlyError(ls.error), 'error'); if (S.workshop) S.workshop.listings = []; }
   else if (S.workshop) S.workshop.listings = ls.data || [];
   applyRoute();
+}
+
+function withPrivateReceiptDetails(record){
+  const joined = Array.isArray(record.private_receipt) ? record.private_receipt[0] : record.private_receipt;
+  const details = joined?.snapshot?.service;
+  if (!details) return record;
+  return { ...record, work_performed: details.work_performed, parts_text: details.parts,
+    mileage_km: details.mileage_km, cost: details.cost, notes: details.notes };
 }
 
 async function routeSession(force = false){
@@ -3825,6 +3853,7 @@ function resetState(){
   S.listEditId = null; S.listImgDrafts = []; S.listUrlsWork = [];
   S.passportPub = null; S.passportPubLoading = null;
   S.recDetail = null; S.recDetailLoading = null;
+  S.receipt = null; S.receiptSettings = null;
   S.notifications = []; S.notifLoading = false; S.unread = 0;
   S.notifLoadedOnce = false; S.notifError = null; S.notifSeq = 0;
   S.admin = null; S.adminLoading = false;
@@ -4104,6 +4133,7 @@ function recordRowHTML(r){
       ${r.parts_text ? `<span><svg class="ic" aria-hidden="true"><use href="#i-box"/></svg>${esc(r.parts_text)}</span>` : ''}
       ${r.member?.full_name ? `<span><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Serviced by ${esc(r.member.full_name)}</span>` : ''}
     </div>
+    <a class="link-row" href="#/record/${esc(r.id)}">View service record and receipt <svg class="ic" aria-hidden="true"><use href="#i-chev-r"/></svg></a>
   </article>`;
 }
 
@@ -4251,7 +4281,7 @@ function screenVehicleDetail(id){
     recEl.innerHTML = skelBlock;
     DB.records.listForVehicle(v.id).then(res => {
       S.vehRecLoading = null;
-      S.vehRecords = { id: v.id, list: res.error ? [] : (res.data || []) };
+      S.vehRecords = { id: v.id, list: res.error ? [] : (res.data || []).map(withPrivateReceiptDetails) };
       if (res.error) console.warn('[BHAT] vehicle records', res.error);
       if (parseHash().name === 'vehicle' && parseHash().param === id) applyRoute();
     });
@@ -4487,7 +4517,7 @@ function screenPassport(token){
       el.innerHTML = skelBlock;
       DB.records.listForVehicle(own.id).then(res => {
         S.vehRecLoading = null;
-        S.vehRecords = { id: own.id, list: res.error ? [] : (res.data || []) };
+        S.vehRecords = { id: own.id, list: res.error ? [] : (res.data || []).map(withPrivateReceiptDetails) };
         if (res.error) console.warn('[BHAT] vehicle records', res.error);
         if (parseHash().name === 'passport' && parseHash().param === token) applyRoute();
       });
@@ -4527,6 +4557,10 @@ async function sharePassport(token){
 function screenRecord(id){
   const el = $('#record-body');
   const render = r => {
+    const receipt = S.receipt && S.receipt.recordId === id && S.receipt.userId === S.user?.id ? S.receipt : null;
+    const privateService = receipt?.snapshot?.service;
+    if (privateService) r = { ...r, work_performed: privateService.work_performed, parts_text: privateService.parts,
+      mileage_km: privateService.mileage_km, cost: privateService.cost, notes: privateService.notes };
     const verified = !!r.booking_id;
     el.innerHTML = `
       <article class="card" style="padding:22px">
@@ -4555,6 +4589,7 @@ function screenRecord(id){
             <p>Recorded ${esc(fmtDateTime(r.created_at))}<small>Timestamp</small></p></div>
         </div>
       </section>
+      <section class="home-sec" id="record-receipt-panel">${receiptPanelHTML(receipt)}</section>
       ${r.public_token ? `<div class="p-cta" style="margin-top:18px">
         <button class="btn btn-primary" data-qr-record="${esc(r.public_token)}" data-qr-name="${esc(r.service_name)}">
           <svg class="ic" aria-hidden="true"><use href="#i-share"/></svg>Share / QR code
@@ -4563,7 +4598,7 @@ function screenRecord(id){
       <p class="hint" style="margin-top:8px;text-align:center">Anyone who scans or opens the link sees only this record\u2019s public details.</p>` : ''}
       <p class="trust-note" style="margin-top:16px"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Verified records come from real bookings completed by workshops on BHAT NETWORK and can\u2019t be edited afterwards.</p>`;
   };
-  if (S.recDetail && S.recDetail.id === id){ render(S.recDetail); return; }
+  if (S.recDetail && S.recDetail.id === id){ render(S.recDetail); loadReceiptForRecord(id); return; }
   if (S.recDetailLoading !== id){
     S.recDetailLoading = id;
     el.innerHTML = skelBlock;
@@ -4579,6 +4614,56 @@ function screenRecord(id){
   } else {
     el.innerHTML = skelBlock;
   }
+}
+
+function receiptPanelHTML(receipt){
+  if (!receipt || receipt.status === 'loading') return '<p class="hint">Loading your private receipt…</p>';
+  if (receipt.status === 'missing') return '<div class="card quiet"><div><h3>No PDF receipt for this older service</h3><p>Receipts are created for services completed after this feature was added.</p></div></div>';
+  if (receipt.status === 'error') return '<div class="card quiet"><div><h3>Couldn’t load the receipt</h3><p>Please check your connection and try again.</p></div><button class="btn btn-ghost" type="button" data-receipt-retry>Try again</button></div>';
+  return `<div class="card" style="padding:18px">
+    <h3>Private service receipt</h3>
+    <p class="hint" style="margin:8px 0">${esc(receipt.snapshot.message || '')}</p>
+    <p class="hint">Only you and the authorized workshop can open this receipt in the app. If you share the PDF, the recipient can keep a copy.</p>
+    <div class="p-cta" style="margin-top:12px">
+      <button class="btn btn-primary" type="button" data-receipt-share>Share PDF / WhatsApp</button>
+      <button class="btn btn-ghost" type="button" data-receipt-download>Download PDF</button>
+    </div>
+    <p class="hint" style="margin-top:8px">Choose WhatsApp in your device&rsquo;s share sheet. Nothing is sent automatically.</p>
+  </div>`;
+}
+
+async function loadReceiptForRecord(id, force = false){
+  const userId = S.user?.id;
+  if (!userId || !sb) return;
+  if (!force && S.receipt?.recordId === id && S.receipt?.userId === userId) return;
+  const state = { recordId: id, userId, status: 'loading' };
+  S.receipt = state;
+  try {
+    const res = await DB.receipts.forRecord(id);
+    if (S.receipt !== state || S.user?.id !== userId) return;
+    if (res.error) throw res.error;
+    if (!res.data){ state.status = 'missing'; }
+    else {
+      if (!window.BhatReceipt) throw new Error('Receipt generator unavailable');
+      state.snapshot = res.data.snapshot;
+      state.blob = window.BhatReceipt.generatePdf(state.snapshot);
+      state.filename = `bhat-service-receipt-${String(res.data.id).slice(0, 8)}.pdf`;
+      state.status = 'ready';
+    }
+  } catch (err){ console.warn('[BHAT] private receipt unavailable', err); state.status = 'error'; }
+  if (S.receipt === state && S.user?.id === userId && parseHash().name === 'record' && parseHash().param === id) applyRoute();
+}
+
+async function openReceiptForBooking(bookingId){
+  const userId = S.user?.id;
+  if (!userId) return;
+  try {
+    const res = await DB.receipts.forBooking(bookingId);
+    if (S.user?.id !== userId) return;
+    if (res.error) throw res.error;
+    if (!res.data?.service_record_id){ toast('No receipt is available for this older service.', 'info'); return; }
+    goHash('record/' + res.data.service_record_id);
+  } catch (err){ toast(friendlyError(err), 'error'); }
 }
 
 function screenPublicRecord(token){
@@ -5332,6 +5417,7 @@ function renderCBookingDetail(b){
   ${pendingExtra ? `<div class="card" style="padding:14px 16px;background:rgba(232,154,43,.08);border-color:rgba(232,154,43,.4)">
     <p style="font-weight:700;font-size:14px">The workshop requested additional work — your approval is needed below.</p></div>` : ''}
 
+  ${b.status === 'COMPLETED' ? `<div class="p-cta"><button class="btn btn-primary" type="button" data-booking-receipt="${esc(b.id)}">View private receipt</button></div>` : ''}
   <section class="home-sec" style="margin-top:22px">
     <p class="sec-label">Progress</p>
     <div class="card" style="padding:18px 18px 10px">${progressBarHTML(b)}${timelineHTML(b)}</div>
@@ -6199,6 +6285,7 @@ function renderBookingDetail(b){
     </div>
   </article>
 
+  ${b.status === 'COMPLETED' ? `<div class="p-cta"><button class="btn btn-primary" type="button" data-booking-receipt="${esc(b.id)}">View private receipt</button></div>` : ''}
   <section class="home-sec" style="margin-top:22px">
     <p class="sec-label">Customer</p>
     <div class="card info-list">
@@ -6519,12 +6606,7 @@ async function onSubmitRecord(e){
   if (btn.disabled) return;
   setBusy(btn, true);
   try {
-    const row = {
-      workshop_id: b.workshop_id,
-      booking_id: b.id,
-      vehicle_id: b.vehicle_id,
-      customer_profile_id: b.customer?.id,
-      member_profile_id: S.user.id,
+    const fields = {
       service_name: name,
       service_category: cat,
       work_performed: work || null,
@@ -6534,16 +6616,16 @@ async function onSubmitRecord(e){
       record_date: date,
       notes: notes || null
     };
-    const rec = await DB.records.create(row);
-    if (rec.error && rec.error.code !== '23505') throw rec.error;
-    const done = await doTransition(b, 'COMPLETED');
-    if (done){
-      closeOverlay($('#sheet-record'));
-      toast('Service record saved to the vehicle\u2019s history', 'success');
-      if (S.workshop) loadWorkshopSpace();
-    } else if (rec.error?.code === '23505'){
-      toast('A service record for this booking already exists.', 'info');
-    }
+    markSelfWrite(b.id);
+    const result = await DB.receipts.complete(b.id, fields);
+    if (result.error) throw result.error;
+    closeOverlay($('#sheet-record'));
+    toast('Service completed and private receipt created', 'success');
+    const upd = await DB.updates.create({ booking_id: b.id, workshop_id: b.workshop_id,
+      vehicle_id: b.vehicle_id, author_profile_id: S.user.id, title: 'Service completed', message: null });
+    if (upd.error) console.warn('[BHAT] update push', upd.error);
+    await refreshBooking(b.id);
+    if (S.workshop) loadWorkshopSpace();
   } catch (err){ toast(friendlyError(err), 'error'); }
   finally { setBusy(btn, false); }
 }
@@ -6737,6 +6819,52 @@ function screenWorkshopForm(){
   }
   renderWsQRPanel();
   renderImgBlock();
+  initReceiptSettings();
+}
+
+function initReceiptSettings(){
+  const form = $('#form-receipt-settings');
+  const w = S.workshop, userId = S.user?.id;
+  form.hidden = !w || !userId;
+  if (form.hidden) return;
+  if (S.receiptSettings?.workshopId === w.id && S.receiptSettings?.userId === userId) return;
+  const state = { workshopId: w.id, userId, status: 'loading' };
+  S.receiptSettings = state;
+  $('#receipt-message').value = '';
+  $('#receipt-message').disabled = true;
+  $('#receipt-message-save').disabled = true;
+  DB.receipts.settings(w.id).then(res => {
+    if (S.receiptSettings !== state || S.user?.id !== userId) return;
+    if (res.error){
+      S.receiptSettings = null;
+      form.hidden = true;
+      toast('Couldn’t load receipt settings. Open Workshop to try again.', 'error');
+      return;
+    }
+    state.status = 'ready';
+    $('#receipt-message').placeholder = res.data?.completion_message || 'Thank you for choosing our workshop.';
+    $('#receipt-message').value = res.data?.is_custom ? res.data.completion_message : '';
+    $('#receipt-message').disabled = false;
+    $('#receipt-message-save').disabled = false;
+  }).catch(err => {
+    if (S.receiptSettings === state){ S.receiptSettings = null; form.hidden = true; toast(friendlyError(err), 'error'); }
+  });
+}
+
+async function onSubmitReceiptSettings(e){
+  e.preventDefault();
+  if (!requireConfig() || !S.workshop || S.receiptSettings?.status !== 'ready') return;
+  const btn = $('#receipt-message-save');
+  if (btn.disabled) return;
+  setBusy(btn, true);
+  try {
+    const res = await DB.receipts.saveSettings(S.workshop.id, val('receipt-message'));
+    if (res.error) throw res.error;
+    $('#receipt-message').placeholder = res.data?.completion_message || 'Thank you for choosing our workshop.';
+    $('#receipt-message').value = res.data?.is_custom ? res.data.completion_message : '';
+    toast('Receipt message saved for future services', 'success');
+  } catch (err){ toast(friendlyError(err), 'error'); }
+  finally { setBusy(btn, false); }
 }
 
 function renderImgBlock(){
@@ -7689,7 +7817,7 @@ const ROUTES = {
   'vehicles':        { view: 'view-vehicles',      shell: 'customer', auth: true },
   'vehicle':         { view: 'view-vehicle-detail',shell: 'customer', auth: true },
   'passport':        { view: 'view-passport',      shell: 'public', allowAuthed: true },
-  'record':          { view: 'view-record',        shell: 'customer', auth: true },
+  'record':          { view: 'view-record',        shell: 'both',     auth: true },
   's':               { view: 'view-srecord',       shell: 'public' },
   'nearby':          { view: 'view-nearby',        shell: 'customer', auth: true },
   'shop':            { view: 'view-shop',          shell: 'public', allowAuthed: true },
@@ -7803,6 +7931,19 @@ let searchTimer = null;
 
 async function onGlobalClick(e){
   try {
+    const bookingReceipt = e.target.closest('[data-booking-receipt]');
+    if (bookingReceipt){ openReceiptForBooking(bookingReceipt.dataset.bookingReceipt); return; }
+    if (e.target.closest('[data-receipt-retry]')){ loadReceiptForRecord(parseHash().param, true); return; }
+    if (e.target.closest('[data-receipt-download]')){
+      if (S.receipt?.status === 'ready' && S.receipt.userId === S.user?.id) window.BhatReceipt.download(S.receipt.blob, S.receipt.filename);
+      return;
+    }
+    if (e.target.closest('[data-receipt-share]')){
+      if (S.receipt?.status !== 'ready' || S.receipt.userId !== S.user?.id) return;
+      const result = await window.BhatReceipt.share(S.receipt.blob, S.receipt.filename);
+      if (result.status === 'downloaded') toast('PDF downloaded. Attach it manually in WhatsApp.', 'info', 6000);
+      return;
+    }
     const back = e.target.closest('[data-back]');
     if (back){
       const role = back.dataset.back;
@@ -8340,6 +8481,7 @@ function bind(){
   on('#form-extra','submit',onSubmitExtra);
   on('#form-record','submit',onSubmitRecord);
   on('#form-workshop','submit',onSubmitWorkshop);
+  on('#form-receipt-settings','submit',onSubmitReceiptSettings);
   on('#form-adm','submit',onSubmitAdminAction);
   on('#form-profile','submit',onSubmitProfile);
   on('#form-edit-booking','submit',onSubmitBookingEdit);
