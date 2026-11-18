@@ -1562,7 +1562,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
               </div>
               <div class="form-grid two">
                 <div class="field">
-                  <label for="ws-district">District <span class="muted">(optional)</span></label>
+                  <label for="ws-district">District</label>
                   <select id="ws-district" data-districts></select>
                   <span class="field-error" aria-live="polite"></span>
                 </div>
@@ -1647,7 +1647,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
         <div class="card profile-card">
           <span class="avatar" id="pf-avatar" aria-hidden="true">B</span>
           <div style="min-width:0">
-            <h2 id="pf-name"></h2>
+            <h2 id="pf-display-name"></h2>
             <p class="muted" id="pf-email" style="overflow-wrap:anywhere;font-size:14px"></p>
             <div class="pf-meta">
               <span class="chip chip-role" id="pf-role"></span>
@@ -1843,6 +1843,16 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
         <input id="pf-phone" type="tel" inputmode="tel" maxlength="18" placeholder="e.g. 6000000000">
         <span class="field-error" aria-live="polite"></span>
         <span class="hint">Required — workshops use it to reach you.</span>
+      </div>
+      <div class="field">
+        <label for="pf-district">District</label>
+        <select id="pf-district" data-districts></select>
+        <span class="field-error" aria-live="polite"></span>
+      </div>
+      <div class="field">
+        <label for="pf-area">Area / locality <span class="muted">(optional)</span></label>
+        <input id="pf-area" type="text" maxlength="80" placeholder="e.g. Hyderpora">
+        <span class="field-error" aria-live="polite"></span>
       </div>
       <div class="form-actions">
         <button class="btn btn-primary btn-block" id="pf-submit" type="submit">Save profile</button>
@@ -2388,7 +2398,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 const SUPABASE_URL = 'https://hmbpikrgbgtgdmciwmpz.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_LbdWJxql3krR-1e7S9M6rw_385QpWxz';
 const APP_LOGO = 'https://res.cloudinary.com/prjgzqvy/image/upload/v1791482355/file_000000004eb861f79937c93d00e0ffe8_zyxoxf.png';
-const APP_VERSION = 'v0.12.1';
+const APP_VERSION = 'v0.12.2';
 
 const sb = window.supabase
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -2626,7 +2636,7 @@ function hoursSummary(w){
 function mapsLink(w){
   if (w.latitude != null && w.longitude != null)
     return `https://www.google.com/maps/search/?api=1&query=${w.latitude},${w.longitude}`;
-  const q = encodeURIComponent([w.name, w.address_text, w.area, w.district].filter(Boolean).join(', '));
+  const q = encodeURIComponent([w.name, w.address_text, w.area, w.city, w.district, w.state, w.postal_code].filter(Boolean).join(', '));
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
 function activeServices(w){
@@ -3078,7 +3088,7 @@ const DB = {
     },
     get(id){
       return sb.from('workshops')
-        .select('id,name,description,phone,district,area,address_text,status,is_verified,verification_status,photo_url,open_time,close_time,working_days,latitude,longitude,created_at,services:workshop_services(id,name,category,price_min,price_max,price_note,is_active),hours:workshop_hours(day_of_week,is_open,open_time,close_time)')
+        .select('id,name,description,phone,district,area,city,state,postal_code,address_text,status,is_verified,verification_status,photo_url,open_time,close_time,working_days,latitude,longitude,created_at,services:workshop_services(id,name,category,price_min,price_max,price_note,is_active),hours:workshop_hours(day_of_week,is_open,open_time,close_time)')
         .eq('id', id)
         .eq('status', 'active')
         .maybeSingle();
@@ -3521,7 +3531,7 @@ function onSubmitObC1(e){
   if (!phone){ fieldError($('#ob-c-phone'), 'Phone number is required.'); ok = false; }
   else if (!isValidPhone(phone)){ fieldError($('#ob-c-phone'), 'Enter a valid phone number.'); ok = false; }
   if (!ok) return;
-  OB.c = { name, phone, district: '', area: '' };
+  OB.c = { ...(OB.c || { district: '', area: '' }), name, phone };
   showStep('c', 2);
 }
 
@@ -3606,7 +3616,7 @@ function onSubmitObO1(e){
   if (!phone){ fieldError($('#ob-o-phone'), 'Phone number is required.'); ok = false; }
   else if (!isValidPhone(phone)){ fieldError($('#ob-o-phone'), 'Enter a valid phone number.'); ok = false; }
   if (!ok) return;
-  OB.o = { name, phone, wname: '', desc: '', district: '', area: '', address: '', wphone: '' };
+  OB.o = { ...(OB.o || { wname: '', desc: '', district: '', area: '', address: '', wphone: '' }), name, phone };
   showStep('o', 2);
 }
 
@@ -4443,8 +4453,8 @@ function screenShopDetail(id){
       <div class="card info-list">
         <div class="info-row"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>
           <p>${esc(hoursSummary(w))}<small>Working hours</small></p></div>
-        ${w.address_text || w.area || w.district || w.city ? `<div class="info-row"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg>
-          <p>${esc([w.address_text, w.area, w.city, w.district].filter(Boolean).join(', '))}<small>Address</small></p></div>` : ''}
+        ${w.address_text || w.area || w.district || w.city || w.state || w.postal_code ? `<div class="info-row"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg>
+          <p>${esc([w.address_text, w.area, w.city, w.district, w.state, w.postal_code].filter(Boolean).join(', '))}<small>Address</small></p></div>` : ''}
         ${w.phone ? `<div class="info-row"><svg class="ic" aria-hidden="true"><use href="#i-phone"/></svg>
           <p><a href="tel:${esc(w.phone)}" style="text-decoration:none;color:inherit">${esc(w.phone)}</a><small>Call workshop</small></p></div>` : ''}
       </div>
@@ -5078,7 +5088,7 @@ async function respondExtra(status, xid){
 function screenProfile(){
   const p = S.profile; if (!p) return;
   $('#pf-avatar').innerHTML = avatarInner(p.avatar_url, initial());
-  $('#pf-name').textContent = p.full_name || 'BHAT NETWORK user';
+  $('#pf-display-name').textContent = p.full_name || 'BHAT NETWORK user';
   $('#pf-email').textContent = S.user?.email || '';
   $('#pf-role').textContent = roleLabel(p.role);
   $('#pf-role').classList.toggle('owner', p.role !== 'customer');
@@ -5093,6 +5103,8 @@ function openProfileSheet(){
   if (S.pfImgDraft){ URL.revokeObjectURL(S.pfImgDraft.url); S.pfImgDraft = null; }
   $('#pf-name').value = S.profile?.full_name || '';
   $('#pf-phone').value = S.profile?.phone || '';
+  $('#pf-district').value = S.profile?.district || '';
+  $('#pf-area').value = S.profile?.area || '';
   renderPfPick();
   openOverlay($('#sheet-profile'));
   setTimeout(() => $('#pf-name')?.focus(), 140);
@@ -5165,7 +5177,7 @@ async function saveProfilePhotoOnly(){
 async function onSubmitProfile(e){
   e.preventDefault(); if (!requireConfig()) return;
   const f = e.currentTarget; clearErrors(f);
-  const name = val('pf-name'), phone = val('pf-phone');
+  const name = val('pf-name'), phone = val('pf-phone'), district = $('#pf-district').value, area = val('pf-area');
   let ok = true;
   if (name.length < 2){ fieldError($('#pf-name'), 'Please enter your full name.'); ok = false; }
   if (!phone){ fieldError($('#pf-phone'), 'Phone number is required.'); ok = false; }
@@ -5177,7 +5189,9 @@ async function onSubmitProfile(e){
   try {
     let avatar_url = S.profile?.avatar_url || null;
     if (S.pfImgDraft) avatar_url = await saveAvatarUrl(S.pfImgDraft.blob);
-    const res = await DB.profiles.update(S.user.id, { full_name: name, phone, avatar_url });
+    const res = await DB.profiles.update(S.user.id, {
+      full_name: name, phone, district: district || null, area: area || null, avatar_url
+    });
     if (res.error) throw res.error;
     S.profile = res.data;
     if (S.pfImgDraft){ URL.revokeObjectURL(S.pfImgDraft.url); S.pfImgDraft = null; }
@@ -6355,6 +6369,7 @@ async function onSubmitWorkshop(e){
         latRaw = val('ws-lat'), lngRaw = val('ws-lng');
   let ok = true;
   if (name.length < 2){ fieldError($('#ws-name'), 'Please enter your workshop name.'); ok = false; }
+  if (!district){ fieldError($('#ws-district'), 'Please choose your workshop district.'); ok = false; }
   if (phone && !isValidPhone(phone)){ fieldError($('#ws-phone'), 'Enter a valid phone number.'); ok = false; }
   const lat = latRaw === '' ? null : parseFloat(latRaw);
   if (latRaw && (Number.isNaN(lat) || lat < -90 || lat > 90)){ fieldError($('#ws-lat'), 'Enter a valid latitude (-90 to 90).'); ok = false; }
@@ -7303,6 +7318,13 @@ let searchTimer = null;
 
 async function onGlobalClick(e){
   try {
+    const back = e.target.closest('[data-back]');
+    if (back){
+      const role = back.dataset.back;
+      const step = OB.cur[role] || 1;
+      if (step > 1) showStep(role, step - 1);
+      return;
+    }
     const open = e.target.closest('[data-open-sheet]');
     if (open){
       const id = open.dataset.openSheet;
