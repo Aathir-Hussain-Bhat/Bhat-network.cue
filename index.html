@@ -2388,7 +2388,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 const SUPABASE_URL = 'https://hmbpikrgbgtgdmciwmpz.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_LbdWJxql3krR-1e7S9M6rw_385QpWxz';
 const APP_LOGO = 'https://res.cloudinary.com/prjgzqvy/image/upload/v1791482355/file_000000004eb861f79937c93d00e0ffe8_zyxoxf.png';
-const APP_VERSION = 'v0.12.0';
+const APP_VERSION = 'v0.12.1';
 
 const sb = window.supabase
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -3332,7 +3332,7 @@ function startAuthListener(){
         return;
       }
       if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'USER_UPDATED'){
-        routeSession(event === 'SIGNED_IN');
+        setTimeout(() => routeSession(event === 'SIGNED_IN'), 0);
       }
     } catch (err){ console.error('[BHAT] auth event', err); }
   });
@@ -7272,7 +7272,7 @@ function applyRoute(){
     if (!r.auth) return redirect(roleHome());
     if (name === 'onboarding' && S.profile.onboarding_complete) return redirect(roleHome());
     if (name !== 'onboarding' && !S.profile.onboarding_complete) return redirect('onboarding');
-    if (name !== 'complete-profile' && !String(S.profile.phone || '').trim()) return redirect('complete-profile');
+    if (S.profile.onboarding_complete && name !== 'complete-profile' && !String(S.profile.phone || '').trim()) return redirect('complete-profile');
     if (r.shell === 'customer' && role !== 'customer') return redirect(roleHome());
     if (r.shell === 'owner' && role !== 'workshop_owner') return redirect(roleHome());
     if (r.shell === 'admin' && role !== 'admin') return redirect(roleHome());
