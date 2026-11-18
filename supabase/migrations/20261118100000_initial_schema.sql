@@ -554,7 +554,7 @@ begin
     end if;
     if v_target is not null then
       insert into public.notifications(profile_id, title, message, notification_type, entity_type, entity_id)
-      values (v_target, v_title, coalesce(new.service_name,new.issue_type,'Service request') || ' Â· ' || new.status, 'service_request', 'service_request', new.id);
+      values (v_target, v_title, coalesce(new.service_name,new.issue_type,'Service request') || ' · ' || new.status, 'service_request', 'service_request', new.id);
     end if;
   end if;
   return new;
