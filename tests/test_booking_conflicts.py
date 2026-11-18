@@ -13,23 +13,27 @@ class BookingConflictTests(unittest.TestCase):
         return HTML[start:end]
 
     def test_overlap_helper_handles_intersection_and_touching_slots(self):
-        start = HTML.index("function appointmentDurationMinutes(b)")
+        start = HTML.index("function appointmentDurationMinutes(b, forScheduling = false)")
         end = HTML.index("function daysSummary(arr)", start)
         helpers = HTML[start:end]
         script = helpers + """
 const result = {
+  falsePositiveNewService: appointmentIntervalsOverlap('2026-11-20T09:00:00Z', appointmentDurationMinutes({ appointment_duration_min: 60, scheduled_at: null, service: { duration_min: 30 } }, true), '2026-11-20T09:30:00Z', 30),
+  actualConflictNewService: appointmentIntervalsOverlap('2026-11-20T09:00:00Z', appointmentDurationMinutes({ appointment_duration_min: 60, scheduled_at: null, service: { duration_min: 45 } }, true), '2026-11-20T09:30:00Z', 30),
   overlap: appointmentIntervalsOverlap('2026-11-20T09:00:00Z', 60, '2026-11-20T09:30:00Z', 30),
   touching: appointmentIntervalsOverlap('2026-11-20T09:00:00Z', 60, '2026-11-20T10:00:00Z', 30),
   separate: appointmentIntervalsOverlap('2026-11-20T09:00:00Z', 30, '2026-11-20T10:00:00Z', 30),
   defaultDuration: appointmentDurationMinutes({}),
-  serviceDuration: appointmentDurationMinutes({ service: { duration_min: 45 } })
+  serviceDuration: appointmentDurationMinutes({ appointment_duration_min: 60, scheduled_at: null, service: { duration_min: 45 } }, true),
+  scheduledSnapshot: appointmentDurationMinutes({ appointment_duration_min: 60, scheduled_at: '2026-11-20T09:00:00Z', service: { duration_min: 30 } }),
+  rescheduledServiceDuration: appointmentDurationMinutes({ appointment_duration_min: 30, scheduled_at: '2026-11-20T09:00:00Z', service: { duration_min: 45 } }, true)
 };
 process.stdout.write(JSON.stringify(result));
 """
         result = subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
         self.assertEqual(
             result.stdout,
-            '{"overlap":true,"touching":false,"separate":false,"defaultDuration":60,"serviceDuration":45}',
+            '{"falsePositiveNewService":false,"actualConflictNewService":true,"overlap":true,"touching":false,"separate":false,"defaultDuration":60,"serviceDuration":45,"scheduledSnapshot":60,"rescheduledServiceDuration":45}',
         )
 
     def test_day_view_has_accessible_date_controls_and_agenda_container(self):
@@ -53,6 +57,16 @@ process.stdout.write(JSON.stringify(result));
         self.assertIn("Choose another time", body)
         self.assertLess(body.index("appointmentIntervalsOverlap"), body.index("doTransition(b, 'SCHEDULED'"))
         self.assertIn("service_requests_no_overlapping_appointments", HTML)
+
+    def test_unscheduled_duration_uses_selected_service_before_preliminary_check(self):
+        start = HTML.index("function appointmentDurationMinutes(b, forScheduling = false)")
+        end = HTML.index("function appointmentIntervalsOverlap", start)
+        helper = HTML[start:end]
+        self.assertIn("const snapshot = Number(b?.appointment_duration_min);", helper)
+        self.assertIn("const service = Number(b?.service?.duration_min);", helper)
+        self.assertIn("function appointmentDurationMinutes(b, forScheduling = false)", helper)
+        self.assertIn("const minutes = forScheduling ? service : snapshot;", helper)
+        self.assertIn("appointmentDurationMinutes(b, true)", HTML[HTML.index("async function onSubmitSchedule(e)"):])
 
     def test_window_query_is_limited_to_active_bookings_in_the_workshop(self):
         body = self.function_body("forWorkshopWindow: (wid, fromIso, toIso)", "get: id => sb.from('service_requests')")
