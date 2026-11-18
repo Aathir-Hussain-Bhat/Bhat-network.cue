@@ -370,6 +370,26 @@ a.svc2-hrow:hover{background:#EAE2CF}
 .wb-sortrow{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .wb-sortrow label{font:700 13px var(--f-body);color:var(--ink-2);white-space:nowrap}
 .wb-sortrow select{min-height:44px;padding:8px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);font:700 14px var(--f-body);color:var(--ink)}
+.wb-day{margin:18px 0 22px;padding:16px;border:1px solid var(--line);border-radius:20px;background:var(--surface)}
+.wb-day-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.wb-day-head .sec-label{margin:0}
+.wb-day-controls{display:flex;align-items:center;gap:8px}
+.wb-day-control{width:42px;height:42px;display:grid;place-items:center;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);color:var(--navy);cursor:pointer}
+.wb-day-control .ic{width:17px;height:17px}
+.wb-day-control[data-wb-day-shift="1"] .ic{transform:rotate(180deg)}
+.wb-day-date{height:42px;max-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);font:700 13px var(--f-body);color:var(--ink)}
+.wb-day-today{min-height:42px;padding:0 12px;font-size:13px}
+.wb-day-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 11px;font-size:13px;color:var(--ink-2);font-weight:600}
+.wb-day-list{display:flex;flex-direction:column;gap:8px}
+.wb-day-item{display:flex;gap:12px;padding:12px;background:var(--surface-2);border-radius:14px;color:inherit;text-decoration:none}
+.wb-day-item:hover{background:#eee8d9}
+.wb-day-time{width:92px;flex:none}
+.wb-day-time strong{display:block;font:700 14px var(--f-body);color:var(--navy)}
+.wb-day-time small{display:block;margin-top:3px;font-size:11.5px;color:var(--ink-2)}
+.wb-day-info{min-width:0;flex:1}
+.wb-day-info strong{display:block;overflow-wrap:anywhere;font-size:14px;color:var(--navy)}
+.wb-day-info small{display:block;margin-top:3px;font-size:12px;color:var(--ink-2)}
+@media(max-width:390px){.wb-day{padding:13px}.wb-day-controls{gap:5px}.wb-day-date{max-width:136px;font-size:12px}.wb-day-today{padding:0 8px}}
 
 .updates{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .upd{display:flex;gap:10px;padding:11px 13px;background:var(--surface-2);border-radius:13px}
@@ -1461,6 +1481,21 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
         <h1>Bookings</h1>
         <svg class="ridge-divider" aria-hidden="true"><use href="#ridge-line"/></svg>
       </header>
+      <section class="wb-day" aria-labelledby="wb-day-title">
+        <div class="wb-day-head">
+          <p class="sec-label" id="wb-day-title">Workshop day</p>
+          <span class="chip" id="wb-day-count" aria-live="polite">0 appointments</span>
+        </div>
+        <div class="wb-day-controls">
+          <button class="wb-day-control" type="button" data-wb-day-shift="-1" aria-label="Previous day"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg></button>
+          <label class="sr-only" for="wb-day-date">Choose workshop day</label>
+          <input class="wb-day-date" id="wb-day-date" type="date">
+          <button class="wb-day-control" type="button" data-wb-day-shift="1" aria-label="Next day"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg></button>
+          <button class="btn btn-ghost wb-day-today" type="button" data-wb-day-today>Today</button>
+        </div>
+        <p class="wb-day-meta" id="wb-day-meta" aria-live="polite"></p>
+        <div class="wb-day-list" id="wb-day-list" aria-label="Appointments for the selected day"></div>
+      </section>
       <div class="searchbar">
         <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
         <input id="wb-search" type="search" placeholder="Search customer, phone, vehicle or service…" aria-label="Search bookings" autocomplete="off">
@@ -2178,7 +2213,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
           <span class="field-error" aria-live="polite"></span>
         </div>
       </div>
-      <p class="hint" style="margin-top:10px">Must fall within your workshop&rsquo;s opening hours. The customer sees the appointment and the estimate once saved.</p>
+      <p class="hint" style="margin-top:10px">Must fall within your workshop&rsquo;s opening hours and cannot overlap another appointment. Service length follows the selected service; general requests use a one-hour slot.</p>
       <div class="form-actions">
         <button class="btn btn-primary btn-block" id="sc-submit" type="submit">Confirm schedule</button>
       </div>
@@ -2454,6 +2489,7 @@ const S = {
   workshop: null, workshopLoading: false,
   wBookings: [], wBookingsLoading: false, wBookingFilter: 'all',
   wBookingQuery: '', wBookingSort: 'recent', wHistOpen: null,
+  wDayDate: '', wDayAppointments: [], wDayLoadedFor: null, wDayLoading: null, wDayError: null,
   wRecords: [], wRecordsLoading: false,
   booking: null, bookingLoading: null,
   wTab: 'details', custTab: 'customers', custQuery: '',
@@ -2652,6 +2688,38 @@ function hoursForDate(w, dateStr){
       : { open:false };
   }
   return null;
+}
+function localDateKey(date = new Date()){
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+function localDayStart(dateStr){
+  const parts = String(dateStr || '').split('-').map(Number);
+  if (parts.length !== 3 || parts.some(n => !Number.isFinite(n) || n < 1)) return null;
+  return new Date(parts[0], parts[1]-1, parts[2]);
+}
+function localDayRange(dateStr){
+  const start = localDayStart(dateStr);
+  if (!start || Number.isNaN(start.getTime())) return null;
+  const end = new Date(start); end.setDate(end.getDate()+1);
+  return { start, end };
+}
+function shiftLocalDate(dateStr, offset){
+  const date = localDayStart(dateStr) || new Date();
+  date.setDate(date.getDate() + Number(offset || 0));
+  return localDateKey(date);
+}
+function fmtLocalDay(dateStr){
+  const date = localDayStart(dateStr);
+  return date ? date.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'short', year:'numeric' }) : dateStr;
+}
+function appointmentDurationMinutes(b){
+  const minutes = Number(b?.appointment_duration_min ?? b?.service?.duration_min);
+  return Number.isFinite(minutes) && minutes >= 5 ? minutes : 60;
+}
+function appointmentIntervalsOverlap(startA, durationA, startB, durationB){
+  const a = new Date(startA).getTime(), b = new Date(startB).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  return a < b + durationB * 60000 && b < a + durationA * 60000;
 }
 function daysSummary(arr){
   if (!Array.isArray(arr) || !arr.length) return '';
@@ -3130,6 +3198,7 @@ function friendlyError(err){
   const c = err && err.code;
   if (c === '23505') return 'That entry already exists.';
   if (c === '23514') return 'Please check the values you entered.';
+  if (c === '23P01' || /service_requests_no_overlapping_appointments/i.test(m)) return 'This time overlaps another appointment. Choose a different time.';
   if (c === '42501' || /row-level security/i.test(m)) return 'You don\u2019t have permission to do that.';
   if (/invalid booking status transition/i.test(m)) return 'That action doesn\u2019t fit this booking\u2019s current status.';
   if (/customers can only cancel or edit/i.test(m)) return 'You can only edit or cancel a request before work begins.';
@@ -3410,16 +3479,28 @@ const DB = {
     forWorkshop: wid => sb.from('service_requests')
       .select(`*, customer:profiles!service_requests_customer_profile_id_fkey(${CUST_COLS}),
                vehicle:vehicles(${VEH_COLS}),
-               service:workshop_services(id,name,category),
+               service:workshop_services(id,name,category,duration_min),
                updates:booking_updates(id,title,message,created_at),
                additional:additional_work_requests(id,title,reason,estimated_cost,status,responded_at,created_at)`)
       .eq('workshop_id', wid)
       .order('created_at', { ascending: false })
       .limit(60),
+    forWorkshopWindow: (wid, fromIso, toIso) => sb.from('service_requests')
+      .select(`id,status,scheduled_at,appointment_duration_min,service_name,
+               customer:profiles!service_requests_customer_profile_id_fkey(${CUST_COLS}),
+               vehicle:vehicles(${VEH_COLS}),
+               service:workshop_services(id,name,category,duration_min)`)
+      .eq('workshop_id', wid)
+      .eq('request_type', 'booking')
+      .in('status', ['SCHEDULED','VEHICLE_RECEIVED','IN_SERVICE','READY'])
+      .gte('scheduled_at', fromIso)
+      .lt('scheduled_at', toIso)
+      .order('scheduled_at', { ascending: true })
+      .limit(250),
     get: id => sb.from('service_requests')
       .select(`*, customer:profiles!service_requests_customer_profile_id_fkey(${CUST_COLS}),
                vehicle:vehicles(${VEH_COLS}),
-               service:workshop_services(id,name,category),
+               service:workshop_services(id,name,category,duration_min),
                workshop:workshops(id,name,area,district,phone),
                updates:booking_updates(id,title,message,created_at),
                history:booking_status_history(id,old_status,new_status,note,changed_at),
@@ -5951,6 +6032,11 @@ function screenDashboard(){
 function screenWBookings(){
   $$('#wb-filters .fchip').forEach(c =>
     c.setAttribute('aria-pressed', String(c.dataset.bfilter === S.wBookingFilter)));
+  if (!S.wDayDate) S.wDayDate = localDateKey();
+  const dayInput = $('#wb-day-date');
+  if (dayInput && dayInput.value !== S.wDayDate) dayInput.value = S.wDayDate;
+  renderWorkshopDay();
+  if (S.workshop) loadWorkshopDayAppointments(true);
   renderWBookingList();
 }
 
@@ -5987,6 +6073,76 @@ function renderWBookingList(){
   }
   const stats = wCustomerStats();
   list.innerHTML = filtered.map(b => wServiceCardHTML(b, stats)).join('');
+}
+
+function renderWorkshopDay(){
+  const list = $('#wb-day-list'), meta = $('#wb-day-meta'), count = $('#wb-day-count');
+  if (!list || !meta || !count) return;
+  const date = S.wDayDate || localDateKey();
+  const hours = hoursForDate(S.workshop, date);
+  const hoursText = hours === null ? 'Opening hours not set' : hours.open ? `Open ${fmtTime(hours.from)}–${fmtTime(hours.to)}` : 'Closed';
+  const todayRows = (S.wDayAppointments || []).filter(b => b.scheduled_at && localDateKey(new Date(b.scheduled_at)) === date)
+    .sort((a, z) => new Date(a.scheduled_at) - new Date(z.scheduled_at));
+  meta.innerHTML = `<span>${esc(fmtLocalDay(date))}</span><span>·</span><span>${esc(hoursText)}</span>`;
+  count.textContent = `${todayRows.length} appointment${todayRows.length === 1 ? '' : 's'}`;
+  if (S.wDayLoading){
+    list.innerHTML = skelBlock;
+    return;
+  }
+  if (S.wDayError){
+    list.innerHTML = `<div class="card quiet"><div><h3>Couldn’t load this day</h3><p>${esc(S.wDayError)}</p><button class="btn btn-ghost" type="button" data-wb-day-refresh style="margin-top:10px">Try again</button></div></div>`;
+    return;
+  }
+  if (!S.workshop){
+    list.innerHTML = `<div class="card quiet"><div><h3>Workshop not set up</h3><p>Add your workshop to see its appointment agenda.</p></div></div>`;
+    return;
+  }
+  if (!todayRows.length){
+    list.innerHTML = `<div class="card quiet"><div><h3>No appointments for this day</h3><p>Confirmed appointments will appear here in time order.</p></div></div>`;
+    return;
+  }
+  list.innerHTML = todayRows.map(b => {
+    const start = new Date(b.scheduled_at);
+    const end = new Date(start.getTime() + appointmentDurationMinutes(b) * 60000);
+    const startText = fmtTime(toLocalInput(start.toISOString()).slice(11,16));
+    const endText = fmtTime(toLocalInput(end.toISOString()).slice(11,16));
+    const vehicle = b.vehicle ? `${b.vehicle.make || ''} ${b.vehicle.model || ''}${b.vehicle.plate ? ` · ${b.vehicle.plate}` : ''}`.trim() : 'Vehicle details unavailable';
+    const service = b.service?.name || b.service_name || 'General service';
+    return `<a class="wb-day-item" href="#/booking/${esc(b.id)}">
+      <span class="wb-day-time"><strong>${esc(startText)}</strong><small>until ${esc(endText)}</small></span>
+      <span class="wb-day-info"><strong>${esc(b.customer?.full_name || 'Customer')}</strong><small>${esc(vehicle)} · ${esc(service)}</small></span>
+      <span class="chip st-${esc(b.status)}">${esc(fmtStatus(b.status))}</span>
+    </a>`;
+  }).join('');
+}
+
+async function loadWorkshopDayAppointments(force = false){
+  if (!S.workshop) return;
+  const date = S.wDayDate || localDateKey();
+  if (!force && S.wDayLoadedFor === date) return;
+  const key = `${S.workshop.id}|${date}`;
+  if (S.wDayLoading === key) return;
+  const range = localDayRange(date);
+  if (!range) return;
+  S.wDayLoading = key;
+  S.wDayError = null;
+  renderWorkshopDay();
+  const from = new Date(range.start.getTime() - 24 * 60 * 60 * 1000);
+  let res;
+  try { res = await DB.bookings.forWorkshopWindow(S.workshop.id, from.toISOString(), range.end.toISOString()); }
+  catch (error){ res = { error }; }
+  if (S.wDayLoading !== key) return;
+  S.wDayLoading = null;
+  if (res.error){
+    console.warn('[BHAT] workshop day appointments', res.error);
+    S.wDayAppointments = [];
+    S.wDayError = friendlyError(res.error);
+  } else {
+    S.wDayAppointments = res.data || [];
+    S.wDayError = null;
+  }
+  S.wDayLoadedFor = date;
+  renderWorkshopDay();
 }
 
 function intakeSectionHTML(b, intake){
@@ -6238,9 +6394,35 @@ async function onSubmitSchedule(e){
       return;
     }
   }
+  if (!w){ fieldError($('#sc-datetime'), 'Workshop details aren’t available. Try again.'); return; }
+  const range = localDayRange(dt.slice(0,10));
+  if (!range){ fieldError($('#sc-datetime'), 'Choose a valid date and time.'); return; }
+  const from = new Date(range.start.getTime() - 24 * 60 * 60 * 1000);
+  let slots;
+  try { slots = await DB.bookings.forWorkshopWindow(w.id, from.toISOString(), range.end.toISOString()); }
+  catch (error){ slots = { error }; }
+  if (slots.error){
+    console.warn('[BHAT] appointment conflict check', slots.error);
+    fieldError($('#sc-datetime'), 'Couldn’t confirm availability. Please try again.');
+    return;
+  }
+  const duration = appointmentDurationMinutes(b);
+  const conflict = (slots.data || []).find(slot => slot.id !== b.id && appointmentIntervalsOverlap(d.toISOString(), duration, slot.scheduled_at, appointmentDurationMinutes(slot)));
+  if (conflict){
+    const conflictTime = fmtTime(toLocalInput(conflict.scheduled_at).slice(11,16));
+    fieldError($('#sc-datetime'), `This overlaps an appointment starting at ${conflictTime}. Choose another time.`);
+    return;
+  }
   const ok = await doTransition(b, 'SCHEDULED', { scheduled_at: d.toISOString(), estimated_ready_at: estIso },
     'Appointment: ' + fmtDateTime(d.toISOString()));
-  if (ok) closeOverlay($('#sheet-schedule'));
+  if (ok){
+    closeOverlay($('#sheet-schedule'));
+    S.wDayDate = dt.slice(0,10);
+    S.wDayLoadedFor = null;
+    S.wDayAppointments = [];
+    if ($('#wb-day-date')) $('#wb-day-date').value = S.wDayDate;
+    await loadWorkshopDayAppointments(true);
+  }
 }
 
 async function onSubmitIntake(e){
@@ -7749,6 +7931,20 @@ async function onGlobalClick(e){
     if (dashHrs){ S.wTab = 'hours'; goHash('workshop'); return; }
     const dashLs = e.target.closest('[data-dash-listings]');
     if (dashLs){ S.wTab = 'listings'; goHash('workshop'); return; }
+    const dayShift = e.target.closest('[data-wb-day-shift]');
+    if (dayShift){
+      S.wDayDate = shiftLocalDate(S.wDayDate || localDateKey(), Number(dayShift.dataset.wbDayShift));
+      S.wDayLoadedFor = null; S.wDayAppointments = []; S.wDayError = null;
+      if ($('#wb-day-date')) $('#wb-day-date').value = S.wDayDate;
+      renderWorkshopDay(); loadWorkshopDayAppointments(true); return;
+    }
+    if (e.target.closest('[data-wb-day-today]')){
+      S.wDayDate = localDateKey();
+      S.wDayLoadedFor = null; S.wDayAppointments = []; S.wDayError = null;
+      if ($('#wb-day-date')) $('#wb-day-date').value = S.wDayDate;
+      renderWorkshopDay(); loadWorkshopDayAppointments(true); return;
+    }
+    if (e.target.closest('[data-wb-day-refresh]')){ loadWorkshopDayAppointments(true); return; }
     const bfilter = e.target.closest('[data-bfilter]');
     if (bfilter){ S.wBookingFilter = bfilter.dataset.bfilter; renderWBookingList(); return; }
     const whcat = e.target.closest('[data-whcat]');
@@ -8023,6 +8219,11 @@ function onDocChange(e){
     const c = e.target.closest('[data-hour-close]');
     if (c){ ensureHoursBuf(); S.hoursBuf[c.dataset.hourClose].close_time = c.value; return; }
     if (e.target.id === 'wh-month'){ S.whFilter.month = e.target.value; renderHistoryResults(); return; }
+    if (e.target.id === 'wb-day-date' && e.target.value){
+      S.wDayDate = e.target.value;
+      S.wDayLoadedFor = null; S.wDayAppointments = []; S.wDayError = null;
+      renderWorkshopDay(); loadWorkshopDayAppointments(true); return;
+    }
     if (e.target.id === 'wb-sort'){ S.wBookingSort = e.target.value || 'recent'; renderWBookingList(); return; }
     if (e.target.id === 'mk-sort'){ S.mSort = e.target.value || 'recent'; loadMarket(true); return; }
     if (e.target.id === 'mk-avail'){ S.mFilter.avail = e.target.value; loadMarket(true); return; }
