@@ -11,8 +11,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-web-app-title" content="BHAT NETWORK">
 
-<link rel="icon" type="image/png" href="https://res.cloudinary.com/prjgzqvy/image/upload/v1791482355/file_000000004eb861f79937c93d00e0ffe8_zyxoxf.png">
-<link rel="apple-touch-icon" href="https://res.cloudinary.com/prjgzqvy/image/upload/v1791482355/file_000000004eb861f79937c93d00e0ffe8_zyxoxf.png">
+<link rel="icon" type="image/png" sizes="32x32" href="./assets/branding/bhat-network-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./assets/branding/bhat-network-180.png">
+<link rel="manifest" href="./manifest.webmanifest">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -76,6 +77,17 @@ svg.ic{width:20px;height:20px;flex:none}
 @media(min-width:560px){.form-grid.two{grid-template-columns:1fr 1fr}}
 .form-actions{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap}
 .form-actions .btn{flex:1;min-width:140px}
+.bhat-admin-data{display:grid;gap:14px}
+.bhat-admin-data label{font-weight:700;display:block}
+.bhat-admin-data select,.bhat-admin-data textarea{display:block;width:100%;padding:12px;border:1.5px solid var(--line-2);border-radius:12px;background:var(--surface);margin-top:6px}
+.bhat-admin-data textarea{font:13px/1.5 monospace;resize:vertical;max-width:100%}
+.bhat-admin-data ol{list-style:none;display:grid;gap:8px}
+.bhat-admin-data li{padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow-wrap:anywhere;font-size:13px}
+.bhat-admin-data li span{display:block;color:var(--ink-2);margin-top:5px}
+.bhat-admin-data button{border:1px solid var(--teal);border-radius:10px;padding:8px 14px;font-weight:700;color:var(--teal);background:var(--surface)}
+.bhat-admin-data button:disabled{opacity:.45}
+.bhat-admin-status.error{color:var(--danger)}
+.bhat-admin-status.success{color:var(--success)}
 .pw-wrap{position:relative}
 .pw-wrap input{padding-right:52px}
 .pw-toggle{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:var(--ink-2)}
@@ -120,7 +132,7 @@ svg.ic{width:20px;height:20px;flex:none}
 #splash{position:fixed;inset:0;z-index:100;background:var(--navy);display:grid;place-items:center;transition:opacity .3s ease,visibility .3s ease}
 #splash.is-hidden{opacity:0;visibility:hidden}
 .splash-inner{display:flex;flex-direction:column;align-items:center;gap:18px}
-.splash-ridge{width:210px;height:44px;color:#F7F3EA;animation:sunPulse 2.2s ease-in-out infinite}
+.splash-logo{width:148px;height:148px;object-fit:contain;border-radius:28px;animation:sunPulse 2.2s ease-in-out infinite}
 @keyframes sunPulse{50%{opacity:.7}}
 
 .view{display:none}
@@ -138,6 +150,7 @@ svg.ic{width:20px;height:20px;flex:none}
 .welcome-top{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;padding:36px 24px 10px}
 .welcome-hi{font-size:14.5px;font-weight:600;color:var(--ink-2);letter-spacing:.04em}
 .welcome-top .wordmark{margin-top:16px}
+.welcome-logo{width:112px;height:112px;object-fit:contain;border-radius:22px}
 .welcome-copy{margin-top:auto;padding:26px 0 34px;max-width:520px}
 .welcome-copy h1{font:700 clamp(32px,8.6vw,44px)/1.12 var(--f-display);color:var(--navy);letter-spacing:-.01em}
 .welcome-copy p{margin-top:16px;font-size:15.5px;color:var(--ink-2);max-width:440px;margin-left:auto;margin-right:auto}
@@ -528,6 +541,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
   body[data-shell="owner"] #tabbar-owner,
   body[data-shell="admin"] #tabbar-admin{display:flex;position:fixed;top:0;bottom:0;left:0;width:264px;flex-direction:column;justify-content:flex-start;gap:6px;background:var(--navy);border:0;border-right:1px solid rgba(247,243,234,.08);border-radius:0;box-shadow:none;backdrop-filter:none;padding:28px 16px}
   .rail-brand{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:0 12px 24px;color:#F7F3EA}
+  .rail-logo{width:52px;height:52px;object-fit:contain;border-radius:12px;margin-bottom:2px}
   .rail-ridge{width:64px;height:14px;color:var(--saffron)}
   .rail-brand strong{font:800 15px var(--f-display);letter-spacing:.2em}
   .rail-brand span{font-size:12.5px;font-weight:600;color:#8FA6AE}
@@ -748,7 +762,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 
 <div id="splash" role="status" aria-label="Loading BHAT NETWORK">
   <div class="splash-inner">
-    <svg class="splash-ridge" aria-hidden="true"><use href="#ridge-line"/></svg>
+    <img class="splash-logo" src="./assets/branding/bhat-network-512.png" width="512" height="512" alt="BHAT NETWORK">
     <div class="wordmark"><span class="wm-text" style="color:#F7F3EA">BHAT <em style="color:#9FB6BC">NETWORK</em></span></div>
   </div>
 </div>
@@ -759,7 +773,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
     <div class="welcome">
       <div class="welcome-top">
         <p class="welcome-hi">Welcome to</p>
-        <div class="wordmark lg"><svg class="wm-ridge" aria-hidden="true"><use href="#ridge-line"/></svg><span class="wm-text">BHAT <em>NETWORK</em></span></div>
+        <div class="wordmark lg"><img class="welcome-logo" src="./assets/branding/bhat-network-512.png" width="512" height="512" alt="BHAT NETWORK"></div>
         <div class="welcome-copy">
           <h1>Your vehicle.<br>Your workshop.<br>One network.</h1>
           <p>Find trusted local workshops, manage your vehicle services, and keep your service history connected.</p>
@@ -1477,6 +1491,16 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
     </div>
   </section>
 
+  <section class="view" id="view-admin-data">
+    <div class="page">
+      <div class="backrow">
+        <a class="icon-btn" href="#/admin" aria-label="Back to admin"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg></a>
+        <h1>Manage data</h1>
+      </div>
+      <p class="hint" style="margin-bottom:16px">Advanced editor: choose a data type, then create or edit a row using JSON. Changes affect live data.</p>
+      <div id="admin-data-body"></div>
+    </div>
+  </section>
   <section class="view" id="view-dashboard">
     <div class="page">
       <header class="home-head">
@@ -1823,6 +1847,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 
 <nav id="tabbar-customer" class="tabbar" aria-label="Primary">
   <div class="rail-brand" aria-hidden="true">
+    <img class="rail-logo" src="./assets/branding/bhat-network-192.png" width="192" height="192" alt="">
     <svg class="rail-ridge"><use href="#ridge-line"/></svg>
     <strong>BHAT NETWORK</strong><span>Customer</span>
   </div>
@@ -1835,6 +1860,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 
 <nav id="tabbar-owner" class="tabbar" aria-label="Primary">
   <div class="rail-brand" aria-hidden="true">
+    <img class="rail-logo" src="./assets/branding/bhat-network-192.png" width="192" height="192" alt="">
     <svg class="rail-ridge"><use href="#ridge-line"/></svg>
     <strong>BHAT NETWORK</strong><span>Workshop</span>
   </div>
@@ -1847,6 +1873,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 
 <nav id="tabbar-admin" class="tabbar" aria-label="Admin">
   <div class="rail-brand" aria-hidden="true">
+    <img class="rail-logo" src="./assets/branding/bhat-network-192.png" width="192" height="192" alt="">
     <svg class="rail-ridge"><use href="#ridge-line"/></svg>
     <strong>BHAT NETWORK</strong><span>Admin</span>
   </div>
@@ -2549,13 +2576,14 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.js"></script>
 <script src="receipt.js"></script>
+<script src="admin-data.js"></script>
 <script>
 (() => {
 'use strict';
 
 const SUPABASE_URL = 'https://hmbpikrgbgtgdmciwmpz.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_LbdWJxql3krR-1e7S9M6rw_385QpWxz';
-const APP_LOGO = 'https://res.cloudinary.com/prjgzqvy/image/upload/v1791482355/file_000000004eb861f79937c93d00e0ffe8_zyxoxf.png';
+const APP_LOGO = './assets/branding/bhat-network-512.png';
 const APP_VERSION = 'v0.13.0';
 
 const sb = window.supabase
@@ -5933,7 +5961,9 @@ function screenNotifications(){
       <button class="btn btn-ghost" data-notif-markall style="min-height:42px">Mark all as read</button>
     </div>` +
     S.notifications.map(n => {
-      const href = n.booking_id ? (role === 'workshop_owner' ? `#/booking/${n.booking_id}` : role === 'admin' ? '#/admin' : `#/cbooking/${n.booking_id}`) : '#/notifications';
+      const href = role === 'admin' && n.entity_type === 'workshop' && n.entity_id
+        ? `#/admin-workshop/${encodeURIComponent(n.entity_id)}`
+        : n.booking_id ? (role === 'workshop_owner' ? `#/booking/${n.booking_id}` : role === 'admin' ? '#/admin' : `#/cbooking/${n.booking_id}`) : '#/notifications';
       return `<a class="card req-card ${n.read ? '' : 'notif-unread'}" href="${href}" data-notif="${esc(n.id)}">
         <div class="req-top">
           <div><h3>${esc(n.title)}</h3>${n.body ? `<p class="shop-sub" style="margin-top:2px">${esc(n.body)}</p>` : ''}</div>
@@ -7626,6 +7656,7 @@ function screenAdmin(){
       <a class="btn btn-secondary" href="#/admin-listings">Moderate listings</a>
       <a class="btn btn-ghost" href="#/admin-audit">Audit log</a>
       <a class="btn btn-ghost" href="#/admin-users">Users</a>
+      <a class="btn btn-ghost" href="#/admin-data">Manage data</a>
     </div>`;
 }
 
@@ -7945,6 +7976,7 @@ const ROUTES = {
   'admin-listings':  { view: 'view-admin-listings',  shell: 'admin',  auth: true },
   'admin-users':     { view: 'view-admin-users',     shell: 'admin',  auth: true },
   'admin-audit':     { view: 'view-admin-audit',     shell: 'admin',  auth: true },
+  'admin-data':      { view: 'view-admin-data',      shell: 'admin',  auth: true },
   'profile':         { view: 'view-profile',       shell: 'both',     auth: true },
   'notifications':   { view: 'view-notifications', shell: 'both',     auth: true },
   'error':           { view: 'view-error',         shell: 'public' },
@@ -7962,8 +7994,15 @@ const SCREENS = {
   'complete-profile': screenComplete,
   admin: screenAdmin, 'admin-workshops': screenAdminWorkshops,
   'admin-workshop': screenAdminWorkshop, 'admin-listings': screenAdminListings,
-  'admin-users': screenAdminUsers, 'admin-audit': screenAdminAudit
+  'admin-users': screenAdminUsers, 'admin-audit': screenAdminAudit,
+  'admin-data': () => {
+    if (!adminDataMounted && window.BhatAdminData && sb){
+      window.BhatAdminData.mount($('#admin-data-body'), { sb, esc, toast });
+      adminDataMounted = true;
+    }
+  }
 };
+let adminDataMounted = false;
 const TAB_ALIAS = {
   vehicle: 'vehicles', passport: 'vehicles', record: 'vehicles',
   booking: 'owner-bookings', cbooking: 'bookings', wcustomer: 'owner-customers',
@@ -8014,6 +8053,10 @@ function applyRoute(){
     if (r.shell === 'admin' && role !== 'admin') return redirect(roleHome());
   }
 
+  if (name !== 'admin-data' && adminDataMounted){
+    window.BhatAdminData.unmount();
+    adminDataMounted = false;
+  }
   const shell = r.shell === 'both' ? (role === 'workshop_owner' || role === 'admin' ? 'owner' : 'customer') : r.shell;
   document.body.dataset.shell = shell;
   $$('.view').forEach(v => v.classList.toggle('is-active', v.id === r.view));
@@ -8690,49 +8733,10 @@ function fillSelects(){
   });
 }
 
-function drawIcon(size){
-  const c = document.createElement('canvas'); c.width = c.height = size;
-  const x = c.getContext('2d');
-  x.fillStyle = '#092C35'; x.fillRect(0, 0, size, size);
-  x.fillStyle = '#E89A2B';
-  x.beginPath(); x.arc(size * 0.72, size * 0.26, size * 0.11, 0, Math.PI * 2); x.fill();
-  const poly = (pts, fill) => {
-    x.fillStyle = fill; x.beginPath();
-    pts.forEach(([px, py], i) => i ? x.lineTo(px * size, py * size) : x.moveTo(px * size, py * size));
-    x.closePath(); x.fill();
-  };
-  poly([[0,.72],[.22,.44],[.40,.62],[.58,.40],[.78,.66],[1,.52],[1,1],[0,1]], 'rgba(247,243,234,.35)');
-  poly([[0,.88],[.16,.66],[.34,.80],[.52,.60],[.70,.80],[.86,.70],[1,.80],[1,1],[0,1]], '#F7F3EA');
-  return c.toDataURL('image/png');
-}
-
 function buildManifest(){
-  try {
-    const base = location.origin.startsWith('http')
-      ? location.origin + location.pathname
-      : location.href.split('#')[0];
-    const manifest = {
-      name: 'BHAT NETWORK',
-      short_name: 'BHAT',
-      description: 'Trusted local vehicle service marketplace, Vehicle Passport and workshop workspace.',
-      start_url: base,
-      scope: base,
-      display: 'standalone',
-      background_color: '#F7F3EA',
-      theme_color: '#092C35',
-      icons: [
-        { src: APP_LOGO, sizes: '512x512', type: 'image/png', purpose: 'any' },
-        { src: drawIcon(512), sizes: '512x512', type: 'image/png', purpose: 'any' },
-        { src: drawIcon(192), sizes: '192x192', type: 'image/png', purpose: 'any' }
-      ]
-    };
-    const link = document.createElement('link');
-    link.rel = 'manifest';
-    link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' }));
-    document.head.appendChild(link);
-  } catch (err){ console.warn('[BHAT] manifest', err); }
+  // The static manifest is linked in <head>; keeping this hook makes boot tolerant
+  // of older cached HTML without generating blob URLs that break PWA scope handling.
 }
-
 function updateInstallRow(){
   const row = $('#pf-install'); if (!row) return;
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
@@ -8771,7 +8775,6 @@ function hideSplash(){ const sp = $('#splash'); if (sp.hidden) return; sp.classL
 
 async function boot(){
   fillSelects();
-  buildManifest();
   initServiceWorker().catch(err => console.warn('[BHAT] PWA init skipped:', err));
   updateInstallRow();
   $('#pf-version').textContent = APP_VERSION;
