@@ -536,6 +536,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 .tab .ic{width:21px;height:21px}
 .tab[aria-current="page"]{background:var(--navy);color:#F7F3EA}
 .tab[aria-current="page"] .ic{color:var(--saffron)}
+.review-stars{color:#B97917;letter-spacing:.08em;font-size:15px;white-space:nowrap}
 .rail-brand{display:none}
 
 @media(min-width:960px){
@@ -1677,6 +1678,17 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
         <p style="margin-top:14px" id="ws-verify-row"></p>
       </header>
 
+      <form id="form-verification-application" class="card" style="padding:18px;margin-top:16px" novalidate hidden>
+        <div id="ws-application-summary" aria-live="polite"></div>
+        <div class="field" style="margin-top:12px">
+          <label for="verification-application-note">Note for the verification team <span class="muted">(optional)</span></label>
+          <textarea id="verification-application-note" maxlength="1000" rows="3" placeholder="Share any context that may help the team review your workshop."></textarea>
+          <span class="field-error" aria-live="polite"></span>
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" id="verification-application-submit" type="submit">Apply for verification</button></div>
+        <p class="hint">Your application is reviewed by BHAT NETWORK. Only the workshop owner can submit it. A verified badge is never granted automatically.</p>
+      </form>
+
       <div class="ptabs" id="ws-tabs" role="tablist" aria-label="Workshop sections" hidden>
         <button data-wtab="details" aria-pressed="true">Details</button>
         <button data-wtab="services" aria-pressed="false">Services</button>
@@ -1799,6 +1811,17 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
     </div>
   </section>
 
+  <section class="view" id="view-earnings">
+    <div class="page">
+      <header class="page-head">
+        <h1>Money &amp; earnings</h1>
+        <svg class="ridge-divider" aria-hidden="true"><use href="#ridge-line"/></svg>
+      </header>
+      <p class="hint" style="margin:0 0 18px">This is a workshop-only record view, not a payment or bank balance. Completed-service amounts come from your private receipts; income and expenses you add are labeled workshop-entered. Service estimates and listing prices are not counted as income.</p>
+      <div id="earnings-body" class="stack" aria-live="polite"></div>
+    </div>
+  </section>
+
   <section class="view" id="view-profile">
     <div class="page">
       <header class="page-head">
@@ -1878,6 +1901,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
   <a class="tab" href="#/owner-bookings" data-route="owner-bookings"><svg class="ic"><use href="#i-calendar"/></svg><span>Bookings</span></a>
   <a class="tab" href="#/owner-customers" data-route="owner-customers"><svg class="ic"><use href="#i-users"/></svg><span>Customers</span></a>
   <a class="tab" href="#/workshop" data-route="workshop"><svg class="ic"><use href="#i-wrench"/></svg><span>Workshop</span></a>
+  <a class="tab" href="#/earnings" data-route="earnings"><svg class="ic"><use href="#i-history"/></svg><span>Earnings</span></a>
   <a class="tab" href="#/profile" data-route="profile"><svg class="ic"><use href="#i-user"/></svg><span>Profile</span></a>
 </nav>
 
@@ -2632,6 +2656,9 @@ const S = {
   passportPub: null, passportPubLoading: null,
   recDetail: null, recDetailLoading: null,
   receipt: null, receiptSettings: null,
+  verificationApplication: null,
+  earnings: null,
+  customerReviews: {}, shopReviewSummary: null,
   notifications: [], notifLoading: false, unread: 0,
   notifLoadedOnce: false, notifError: null, notifSeq: 0,
   admin: null, adminLoading: false,
@@ -2761,6 +2788,10 @@ function fmtStatus(s){ return String(s || '').replace(/_/g, ' '); }
 function fmtAction(a){ return String(a || '').replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
 function fmtMonthLabel(m){ try { return new Date(m + '-01T00:00:00').toLocaleDateString('en-IN', { month:'long', year:'numeric' }); } catch { return m; } }
 function fmtPrice(n){ return n != null ? '₹' + Number(n).toLocaleString('en-IN') : ''; }
+function fmtMoney(n){
+  const value = Number(n);
+  return Number.isFinite(value) ? '₹' + value.toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—';
+}
 function toLocalInput(iso){
   try { const d = new Date(iso); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
   catch { return ''; }
@@ -3554,6 +3585,13 @@ const DB = {
       return await sb.from('customers').insert({ profile_id: profileId, ...patch }).select().single();
     }
   },
+  verification: {
+    latestForOwner: (workshopId, profileId) => sb.from('workshop_verification_applications')
+      .select('id,application_note,submitted_at')
+      .eq('workshop_id', workshopId).eq('applicant_profile_id', profileId)
+      .order('submitted_at', { ascending:false }).limit(1).maybeSingle(),
+    submit: (workshopId, note) => sb.rpc('submit_workshop_verification_application', { p_workshop:workshopId, p_note:note || null }),
+  },
   workshops: {
     forOwner: pid => sb.from('workshops')
       .select('*, services:workshop_services(*), hours:workshop_hours(*)')
@@ -3693,6 +3731,17 @@ const DB = {
     forBooking: bookingId => sb.from('workshop_receipts').select('service_record_id').eq('booking_id', bookingId).maybeSingle(),
     settings: workshopId => sb.rpc('get_workshop_receipt_settings', { p_workshop: workshopId }),
     saveSettings: (workshopId, message) => sb.rpc('set_workshop_receipt_message', { p_workshop: workshopId, p_message: message || null }),
+  },
+  reviews: {
+    forBooking: bookingId => sb.rpc('get_service_review_for_booking', { p_booking:bookingId }),
+    submit: (bookingId, rating, comment) => sb.rpc('submit_service_review', { p_booking:bookingId, p_rating:rating, p_comment:comment || null }),
+    publicForWorkshop: workshopId => sb.rpc('public_workshop_reviews', { p_workshop:workshopId }),
+  },
+  earnings: {
+    summary: workshopId => sb.rpc('workshop_earnings_summary', { p_workshop:workshopId }),
+    add: (workshopId, entryType, category, description, amount, entryDate) => sb.rpc('add_workshop_money_entry', {
+      p_workshop:workshopId, p_type:entryType, p_category:category, p_description:description, p_amount:amount, p_entry_date:entryDate
+    }),
   },
   updates: {
     create: row => sb.from('booking_updates').insert(row).select().single(),
@@ -4991,6 +5040,42 @@ function screenNearby(){
     S.workshops.map(shopCardHTML).join('');
 }
 
+function loadPublicWorkshopReviews(workshopId){
+  const state = S.shopReviewSummary;
+  if (state?.id === workshopId) return;
+  const request = { id:workshopId, loading:true, data:null, error:null };
+  S.shopReviewSummary = request;
+  DB.reviews.publicForWorkshop(workshopId).then(res => {
+    if (S.shopReviewSummary !== request) return;
+    S.shopReviewSummary = res.error
+      ? { id:workshopId, loading:false, data:null, error:res.error }
+      : { id:workshopId, loading:false, data:res.data || { review_count:0, average_rating:null, reviews:[] }, error:null };
+    if (parseHash().name === 'shop' && parseHash().param === workshopId) applyRoute();
+  }).catch(error => {
+    if (S.shopReviewSummary === request){
+      S.shopReviewSummary = { id:workshopId, loading:false, data:null, error };
+      if (parseHash().name === 'shop' && parseHash().param === workshopId) applyRoute();
+    }
+  });
+}
+
+function publicWorkshopReviewsHTML(workshopId){
+  let state = S.shopReviewSummary;
+  if (!state || state.id !== workshopId){ loadPublicWorkshopReviews(workshopId); state = S.shopReviewSummary; }
+  if (state?.loading || !state) return `<div class="card quiet"><p class="muted">Loading verified service reviews…</p></div>`;
+  if (state.error) return `<div class="card quiet"><p class="muted">Reviews are temporarily unavailable.</p></div>`;
+  const summary = state.data || {};
+  const reviews = Array.isArray(summary.reviews) ? summary.reviews : [];
+  const count = Number(summary.review_count || 0);
+  if (!count) return `<div class="card quiet"><div><h3>No verified service reviews yet</h3><p>Customers can review after a completed service is recorded with its receipt.</p></div></div>`;
+  const average = Number(summary.average_rating);
+  return `<div class="card" style="padding:16px">
+    <div class="req-top"><div><strong style="font:700 22px var(--f-display);color:var(--navy)">${Number.isFinite(average) ? average.toFixed(1) : '—'} / 5</strong><p class="shop-sub">${count} verified service review${count === 1 ? '' : 's'}</p></div><span class="review-stars" aria-hidden="true">${'★'.repeat(Math.max(0, Math.min(5, Math.round(average || 0))))}</span></div>
+    <div class="stack" style="margin-top:12px">${reviews.map(r => `<article style="border-top:1px solid var(--line);padding-top:12px"><div class="req-top"><strong class="review-stars" aria-label="${Number(r.rating)} out of 5 stars">${'★'.repeat(Number(r.rating) || 0)}${'☆'.repeat(Math.max(0, 5 - (Number(r.rating) || 0)))}</strong><span class="chip chip-verified">Verified service</span></div><p class="shop-sub" style="margin-top:5px">${esc(r.service_name || 'Completed service')} · ${esc(fmtDate(r.created_at))}</p>${r.comment ? `<p style="margin-top:8px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(r.comment)}</p>` : '<p class="hint" style="margin-top:8px">Rating only</p>'}</article>`).join('')}</div>
+    ${count > reviews.length ? `<p class="hint" style="margin-top:12px">Showing the latest ${reviews.length} reviews.</p>` : ''}
+  </div>`;
+}
+
 function screenShopDetail(id){
   const el = $('#shop-body');
   if (!id){ el.innerHTML = emptyStateHTML({ title: 'Workshop not found', text: 'Check the link and try again.' }); return; }
@@ -5040,6 +5125,11 @@ function screenShopDetail(id){
           <span class="svc-price">${s.price_min != null ? esc(priceText(s)) : '<small>Ask workshop</small>'}</span>
         </div>`).join('')}</div>`
       : `<div class="card" style="padding:18px 20px"><p class="muted" style="font-weight:500">This workshop hasn\u2019t listed its services yet — you can still send a general service request.</p></div>`}
+    </section>
+
+    <section class="home-sec">
+      <p class="sec-label">Verified service reviews</p>
+      ${publicWorkshopReviewsHTML(w.id)}
     </section>
 
     <section class="home-sec">
@@ -5540,6 +5630,83 @@ function extraCardCustHTML(x){
   </div>`;
 }
 
+function loadCustomerReviewState(b, force = false){
+  if (!b || b.status !== 'COMPLETED' || b.request_type !== 'booking' || !S.user || S.profile?.role !== 'customer') return;
+  const old = S.customerReviews[b.id];
+  if (!force && old && old.userId === S.user.id) return;
+  const state = { userId:S.user.id, status:'loading', data:null, error:null };
+  S.customerReviews[b.id] = state;
+  DB.reviews.forBooking(b.id).then(res => {
+    if (S.customerReviews[b.id] !== state || S.user?.id !== state.userId) return;
+    S.customerReviews[b.id] = res.error
+      ? { userId:state.userId, status:'error', data:null, error:res.error }
+      : { userId:state.userId, status:'ready', data:res.data || { eligible:false, review:null }, error:null };
+    const h = parseHash();
+    if (h.name === 'cbooking' && h.param === b.id) applyRoute();
+  }).catch(error => {
+    if (S.customerReviews[b.id] === state){
+      S.customerReviews[b.id] = { userId:state.userId, status:'error', data:null, error };
+      if (parseHash().name === 'cbooking' && parseHash().param === b.id) applyRoute();
+    }
+  });
+}
+
+function serviceReviewSectionHTML(b){
+  loadCustomerReviewState(b);
+  const state = S.customerReviews[b.id];
+  if (!state || state.status === 'loading') return `<section class="home-sec"><p class="sec-label">Verified service review</p><div class="card quiet"><p class="muted">Checking review eligibility…</p></div></section>`;
+  if (state.status === 'error') return `<section class="home-sec"><p class="sec-label">Verified service review</p><div class="card quiet"><p class="muted">Couldn’t load this review.</p><button class="btn btn-ghost" type="button" data-review-retry="${esc(b.id)}">Try again</button></div></section>`;
+  const eligibility = state.data || {};
+  if (!eligibility.eligible) return `<section class="home-sec"><p class="sec-label">Verified service review</p><div class="card quiet"><p class="muted">A review is available after the workshop completes this service with its private service receipt.</p></div></section>`;
+  if (eligibility.review){
+    const review = eligibility.review;
+    return `<section class="home-sec"><p class="sec-label">Your verified service review</p><div class="card" style="padding:17px">
+      <div class="req-top"><strong class="review-stars" aria-label="${Number(review.rating)} out of 5 stars">${'★'.repeat(Number(review.rating) || 0)}${'☆'.repeat(Math.max(0, 5 - (Number(review.rating) || 0)))}</strong><span class="chip chip-verified">Verified service</span></div>
+      ${review.comment ? `<p style="margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(review.comment)}</p>` : '<p class="hint" style="margin-top:8px">Rating only</p>'}
+      <p class="hint" style="margin-top:8px">Submitted ${esc(fmtDate(review.created_at))}. Your comment is visible on the workshop’s public profile.</p>
+    </div></section>`;
+  }
+  return `<section class="home-sec"><p class="sec-label">Review this service</p>
+    <form class="card" id="form-service-review" data-booking-id="${esc(b.id)}" novalidate style="padding:18px">
+      <div class="field"><label for="sr-rating">Your rating</label><select id="sr-rating" name="rating"><option value="">Choose a rating</option><option value="5">5 — Excellent</option><option value="4">4 — Very good</option><option value="3">3 — Good</option><option value="2">2 — Fair</option><option value="1">1 — Poor</option></select><span class="field-error" aria-live="polite"></span></div>
+      <div class="field" style="margin-top:12px"><label for="sr-comment">Your review <span class="muted">(optional)</span></label><textarea id="sr-comment" name="comment" maxlength="1500" rows="3" placeholder="Share your experience with this completed service."></textarea><span class="field-error" aria-live="polite"></span></div>
+      <p class="hint" style="margin-top:10px">Only customers with a completed service receipt can review. Your comment is public; avoid sharing phone numbers or other personal details.</p>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Submit verified review</button></div>
+    </form>
+  </section>`;
+}
+
+async function onSubmitServiceReview(e){
+  e.preventDefault();
+  if (!requireConfig() || !S.user || S.profile?.role !== 'customer') return;
+  const form = e.currentTarget;
+  const bookingId = form.dataset.bookingId;
+  const b = (S.booking?.id === bookingId ? S.booking : null) || S.requests.find(x => x.id === bookingId);
+  const state = S.customerReviews[bookingId];
+  if (!b || (b.customer_profile_id && b.customer_profile_id !== S.user.id) || b.status !== 'COMPLETED' || !state?.data?.eligible || state.data.review){
+    toast('Only your completed, receipt-backed service can be reviewed once.', 'error');
+    return;
+  }
+  clearErrors(form);
+  const ratingRaw = String(form.querySelector('[name="rating"]')?.value || '').trim();
+  const rating = Number(ratingRaw);
+  const comment = String(form.querySelector('[name="comment"]')?.value || '').trim();
+  if (!ratingRaw || !Number.isInteger(rating) || rating < 1 || rating > 5){ fieldError(form.querySelector('[name="rating"]'), 'Choose a rating from 1 to 5.'); return; }
+  if (comment.length > 1500){ fieldError(form.querySelector('[name="comment"]'), 'Keep your review under 1500 characters.'); return; }
+  const btn = form.querySelector('button[type="submit"]');
+  if (btn?.disabled) return;
+  setBusy(btn, true);
+  try {
+    const res = await DB.reviews.submit(bookingId, rating, comment);
+    if (res.error) throw res.error;
+    S.customerReviews[bookingId] = { userId:S.user.id, status:'ready', data:{ eligible:true, review:res.data }, error:null };
+    S.shopReviewSummary = null;
+    toast('Verified service review submitted', 'success');
+    applyRoute();
+  } catch (error){ toast(friendlyError(error), 'error'); }
+  finally { setBusy(btn, false); }
+}
+
 function renderCBookingDetail(b){
   const isQuick = b.request_type === 'quick_service';
   const title = isQuick ? (ISSUE_TYPES[b.issue_type] || 'Quick Service') : (b.service?.name || b.service_name || 'Service request');
@@ -5562,7 +5729,7 @@ function renderCBookingDetail(b){
   ${pendingExtra ? `<div class="card" style="padding:14px 16px;background:rgba(232,154,43,.08);border-color:rgba(232,154,43,.4)">
     <p style="font-weight:700;font-size:14px">The workshop requested additional work — your approval is needed below.</p></div>` : ''}
 
-  ${b.status === 'COMPLETED' ? `<div class="p-cta"><button class="btn btn-primary" type="button" data-booking-receipt="${esc(b.id)}">View private receipt</button></div>` : ''}
+  ${b.status === 'COMPLETED' ? `<div class="p-cta"><button class="btn btn-primary" type="button" data-booking-receipt="${esc(b.id)}">View private receipt</button></div>${!isQuick ? serviceReviewSectionHTML(b) : ''}` : ''}
   <section class="home-sec" style="margin-top:22px">
     <p class="sec-label">Progress</p>
     <div class="card" style="padding:18px 18px 10px">${progressBarHTML(b)}${timelineHTML(b)}</div>
@@ -6194,6 +6361,116 @@ function wBookingCardHTML(b){
   </a>`;
 }
 
+function loadWorkshopEarnings(force = false){
+  const workshopId = S.workshop?.id;
+  const userId = S.user?.id;
+  if (!workshopId || !userId || S.profile?.role !== 'workshop_owner') return;
+  if (!force && S.earnings?.workshopId === workshopId && S.earnings.userId === userId && (S.earnings.loading || S.earnings.loaded)) return;
+  const request = { workshopId, userId, loading:true, loaded:false, data:null, error:null };
+  S.earnings = request;
+  const h = parseHash();
+  if (h.name === 'earnings') $('#earnings-body').innerHTML = skelBlock;
+  DB.earnings.summary(workshopId).then(res => {
+    if (S.earnings !== request || S.user?.id !== userId) return;
+    S.earnings = { ...request, loading:false, loaded:true, data:res.error ? null : res.data, error:res.error || null };
+    if (parseHash().name === 'earnings') applyRoute();
+  }).catch(error => {
+    if (S.earnings === request){
+      S.earnings = { ...request, loading:false, loaded:true, error };
+      if (parseHash().name === 'earnings') applyRoute();
+    }
+  });
+}
+
+function screenEarnings(){
+  const el = $('#earnings-body');
+  if (S.profile?.role !== 'workshop_owner') return;
+  if (!S.workshop){
+    el.innerHTML = `<div class="card quiet"><div><h3>Add your workshop first</h3><p>Money tracking is available to workshop accounts.</p></div><a class="btn btn-primary" href="#/workshop">Set up workshop</a></div>`;
+    return;
+  }
+  if (!S.earnings || S.earnings.workshopId !== S.workshop.id || S.earnings.userId !== S.user?.id){
+    el.innerHTML = skelBlock;
+    loadWorkshopEarnings();
+    return;
+  }
+  if (S.earnings.loading){ el.innerHTML = skelBlock; return; }
+  if (S.earnings.error){
+    el.innerHTML = `<div class="card quiet"><div><h3>Couldn’t load money records</h3><p>Please try again.</p></div><button class="btn btn-ghost" type="button" data-earnings-retry>Try again</button></div>`;
+    return;
+  }
+  const payload = S.earnings.data || {};
+  const summary = payload.summary || {};
+  const services = Array.isArray(payload.services) ? payload.services : [];
+  const entries = Array.isArray(payload.manual_entries) ? payload.manual_entries : [];
+  const totalTiles = [
+    ['Completed service amounts', fmtMoney(summary.service_amount_total || 0), `${Number(summary.service_amount_count || 0)} with an amount · ${Number(summary.service_amount_missing_count || 0)} not entered`],
+    ['Workshop-entered income', fmtMoney(summary.workshop_entered_income || 0), 'Manual entries only'],
+    ['Workshop-entered expenses', fmtMoney(summary.workshop_entered_expenses || 0), 'Manual entries only'],
+    ['Recorded difference', fmtMoney(summary.recorded_difference || 0), 'Not a payment or bank balance']
+  ];
+  el.innerHTML = `
+    <div class="stats earnings-stats">${totalTiles.map(([label, amount, note]) => `<article class="card stat"><b style="font-size:19px">${esc(amount)}</b><span>${esc(label)}</span><small class="muted" style="display:block;margin-top:4px">${esc(note)}</small></article>`).join('')}</div>
+    <div class="card" style="padding:18px">
+      <h2 style="font:600 19px var(--f-display);color:var(--navy)">Add a money item</h2>
+      <p class="hint" style="margin:6px 0 14px">These amounts are entered by your workshop and are not independently verified or processed here. Keep them separate from amounts already recorded on service receipts.</p>
+      <form id="form-money-entry" novalidate>
+        <div class="form-grid">
+          <div class="form-grid two">
+            <div class="field"><label for="money-entry-type">Entry type</label><select id="money-entry-type" name="entry_type"><option value="income">Income</option><option value="expense">Expense</option></select><span class="field-error" aria-live="polite"></span></div>
+            <div class="field"><label for="money-entry-amount">Amount (₹)</label><input id="money-entry-amount" name="amount" type="number" inputmode="decimal" min="0.01" step="0.01" required><span class="field-error" aria-live="polite"></span></div>
+          </div>
+          <div class="form-grid two">
+            <div class="field"><label for="money-entry-category">Category</label><input id="money-entry-category" name="category" type="text" maxlength="60" required placeholder="Category"><span class="field-error" aria-live="polite"></span></div>
+            <div class="field"><label for="money-entry-date">Date</label><input id="money-entry-date" name="entry_date" type="date" value="${esc(localDateKey())}" required><span class="field-error" aria-live="polite"></span></div>
+          </div>
+          <div class="field"><label for="money-entry-description">Description</label><input id="money-entry-description" name="description" type="text" maxlength="300" required placeholder="What was this money item for?"><span class="field-error" aria-live="polite"></span></div>
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Save workshop-entered item</button></div>
+      </form>
+      <p class="hint">Entries are append-only for a clear history. To correct a mistake, add an offsetting entry. Avoid entering the same service amount twice.</p>
+    </div>
+    <section class="home-sec"><p class="sec-label">Completed service amounts</p>
+      ${services.length ? `<div class="stack">${services.map(row => `<article class="card" style="padding:14px 16px"><div class="req-top"><div><strong>${esc(row.service_name || 'Completed service')}</strong><p class="shop-sub">${esc(fmtDate(row.record_date))} · Receipt amount recorded</p></div><b style="white-space:nowrap">${row.amount == null ? 'Not entered' : esc(fmtMoney(row.amount))}</b></div></article>`).join('')}</div>` : `<div class="card quiet"><div><h3>No receipt-backed completions yet</h3><p>Completed services with private receipts will appear here. Missing amounts are not assumed to be zero income.</p></div></div>`}
+      <p class="hint" style="margin-top:8px">Totals cover all receipt-backed completed services; this list shows up to 100 recent records. An amount recorded on a receipt does not confirm payment was collected.</p>
+    </section>
+    <section class="home-sec"><p class="sec-label">Workshop-entered money items</p>
+      ${entries.length ? `<div class="stack">${entries.map(row => { const income = row.entry_type === 'income'; return `<article class="card" style="padding:14px 16px"><div class="req-top"><div style="min-width:0"><strong>${income ? 'Income' : 'Expense'} · ${esc(row.category)}</strong><p class="shop-sub" style="overflow-wrap:anywhere">${esc(row.description)}</p><p class="hint" style="margin-top:4px">Workshop-entered · ${esc(fmtDate(row.entry_date))}</p></div><b style="white-space:nowrap;color:${income ? 'var(--teal)' : 'var(--danger)'}">${income ? '+' : '−'}${esc(fmtMoney(row.amount))}</b></div></article>`; }).join('')}</div>` : `<div class="card quiet"><div><h3>No manual money items</h3><p>Items you add will be labeled as workshop-entered and shown separately from receipt amounts.</p></div></div>`}
+      <p class="hint" style="margin-top:8px">Totals cover all manual entries; this list shows up to 100 recent items. Service prices, marketplace listing prices, and additional-work estimates are not counted as completed-service income.</p>
+    </section>`;
+}
+
+async function onSubmitMoneyEntry(e){
+  e.preventDefault();
+  if (!requireConfig() || S.profile?.role !== 'workshop_owner' || !S.workshop || !S.user) return;
+  const form = e.currentTarget;
+  clearErrors(form);
+  const entryType = form.querySelector('[name="entry_type"]')?.value || '';
+  const category = String(form.querySelector('[name="category"]')?.value || '').trim();
+  const description = String(form.querySelector('[name="description"]')?.value || '').trim();
+  const amountRaw = String(form.querySelector('[name="amount"]')?.value || '').trim();
+  const entryDate = String(form.querySelector('[name="entry_date"]')?.value || '').trim();
+  const amount = Number(amountRaw);
+  let valid = true;
+  if (!['income','expense'].includes(entryType)){ fieldError(form.querySelector('[name="entry_type"]'), 'Choose income or expense.'); valid = false; }
+  if (!category || category.length > 60){ fieldError(form.querySelector('[name="category"]'), 'Enter a category (up to 60 characters).'); valid = false; }
+  if (!description || description.length > 300){ fieldError(form.querySelector('[name="description"]'), 'Enter a description (up to 300 characters).'); valid = false; }
+  if (!amountRaw || !Number.isFinite(amount) || amount <= 0 || amount > 9999999999.99){ fieldError(form.querySelector('[name="amount"]'), 'Enter an amount greater than zero.'); valid = false; }
+  if (!entryDate || Number.isNaN(Date.parse(entryDate + 'T00:00:00'))){ fieldError(form.querySelector('[name="entry_date"]'), 'Choose a valid date.'); valid = false; }
+  if (!valid) return;
+  const btn = form.querySelector('button[type="submit"]');
+  if (btn?.disabled) return;
+  setBusy(btn, true);
+  try {
+    const res = await DB.earnings.add(S.workshop.id, entryType, category, description, amount, entryDate);
+    if (res.error) throw res.error;
+    toast('Workshop-entered money item saved', 'success');
+    S.earnings = null;
+    applyRoute();
+  } catch (error){ toast(friendlyError(error), 'error'); }
+  finally { setBusy(btn, false); }
+}
+
 function screenDashboard(){
   $('#dash-greet').textContent = greeting() + ',';
   $('#dash-hi').textContent = firstName();
@@ -6227,6 +6504,8 @@ function screenDashboard(){
     <p class="feat-meta">${esc([w.area, w.district].filter(Boolean).join(', ') || 'Location not set')}</p>
     <div class="quick-actions" style="position:relative">
       <a class="btn btn-light" style="min-height:44px;padding:0 18px;font-size:14px" href="#/owner-bookings">View bookings</a>
+      <a class="btn btn-light" style="min-height:44px;padding:0 18px;font-size:14px" href="#/earnings">Earnings</a>
+      ${!w.is_verified && w.verification_status !== 'SUSPENDED' ? '<a class="btn btn-light" style="min-height:44px;padding:0 18px;font-size:14px" href="#/workshop">Verification application</a>' : ''}
       <button class="btn btn-light" style="min-height:44px;padding:0 18px;font-size:14px" data-dash-services>Add service</button>
       <button class="btn btn-light" style="min-height:44px;padding:0 18px;font-size:14px" data-dash-hours>Update hours</button>
     </div>
@@ -6925,6 +7204,71 @@ function renderWsQRPanel(){
   </div>`;
 }
 
+function loadVerificationApplication(workshopId, force = false){
+  if (!workshopId || !S.user?.id) return;
+  const current = S.verificationApplication;
+  if (!force && current?.workshopId === workshopId && current.userId === S.user.id && (current.loading || current.loaded)) return;
+  const request = { workshopId, userId:S.user.id, loading:true, loaded:false, data:null, error:null };
+  S.verificationApplication = request;
+  renderVerificationApplication();
+  DB.verification.latestForOwner(workshopId, request.userId).then(res => {
+    if (S.verificationApplication !== request || S.user?.id !== request.userId) return;
+    S.verificationApplication = { ...request, loading:false, loaded:true, data:res.error ? null : res.data, error:res.error || null };
+    renderVerificationApplication();
+  }).catch(error => {
+    if (S.verificationApplication === request){
+      S.verificationApplication = { ...request, loading:false, loaded:true, error };
+      renderVerificationApplication();
+    }
+  });
+}
+
+function renderVerificationApplication(){
+  const form = $('#form-verification-application');
+  const summary = $('#ws-application-summary');
+  if (!form || !summary) return;
+  const w = S.workshop;
+  const canApply = !!w && !['VERIFIED','SUSPENDED'].includes(w.verification_status);
+  form.hidden = !canApply;
+  if (!canApply) return;
+  const app = S.verificationApplication?.workshopId === w.id && S.verificationApplication.userId === S.user?.id
+    ? S.verificationApplication : null;
+  if (!app || app.loading){
+    summary.innerHTML = `<h3>Apply for workshop verification</h3><p class="hint" style="margin-top:6px">${w.verification_status === 'REJECTED' ? 'Your workshop can submit a new application for review.' : 'Submit your workshop for review by BHAT NETWORK.'}</p>`;
+  } else if (app.error){
+    summary.innerHTML = `<h3>Apply for workshop verification</h3><p class="hint" style="margin-top:6px">Couldn’t load your latest application. You can still submit an update.</p>`;
+  } else if (app.data){
+    summary.innerHTML = `<div class="req-top"><div><h3>${w.verification_status === 'REJECTED' ? 'Application declined' : 'Application submitted'}</h3><p class="hint" style="margin-top:4px">Sent ${esc(fmtDateTime(app.data.submitted_at))}. ${w.verification_status === 'PENDING' ? 'Your application is awaiting administrator review.' : 'You can send an updated application below.'}</p></div><span class="chip ${w.verification_status === 'PENDING' ? 'chip-primary' : 'st-CANCELLED'}">${esc(VERIFY_STATES[w.verification_status] || 'Not verified')}</span></div>${app.data.application_note ? `<p class="req-note" style="margin-top:10px">${esc(app.data.application_note)}</p>` : ''}`;
+  } else {
+    summary.innerHTML = `<h3>Apply for workshop verification</h3><p class="hint" style="margin-top:6px">Send an application note for the administrator reviewing your workshop.</p>`;
+  }
+  const btn = $('#verification-application-submit');
+  if (btn) btn.textContent = w.verification_status === 'REJECTED' ? 'Submit reapplication' : app?.data ? 'Send application update' : 'Apply for verification';
+}
+
+async function onSubmitVerificationApplication(e){
+  e.preventDefault();
+  if (!requireConfig() || S.profile?.role !== 'workshop_owner' || !S.workshop || !S.user) return;
+  const form = e.currentTarget;
+  clearErrors(form);
+  const note = val('verification-application-note');
+  if (note.length > 1000){ fieldError($('#verification-application-note'), 'Keep the note under 1000 characters.'); return; }
+  const btn = $('#verification-application-submit');
+  if (btn.disabled) return;
+  setBusy(btn, true);
+  try {
+    const res = await DB.verification.submit(S.workshop.id, note);
+    if (res.error) throw res.error;
+    const latest = res.data || {};
+    S.workshop = { ...S.workshop, verification_status:latest.verification_status || 'PENDING', is_verified:false, verification_reason:null };
+    S.verificationApplication = { workshopId:S.workshop.id, userId:S.user.id, loading:false, loaded:true, data:latest, error:null };
+    form.reset();
+    renderVerificationApplication();
+    toast('Verification application sent to BHAT NETWORK', 'success');
+  } catch (error){ toast(friendlyError(error), 'error'); }
+  finally { setBusy(btn, false); }
+}
+
 function screenWorkshopForm(){
   if (S.user?.id !== wsFormUser){
     wsFormUser = S.user?.id || null;
@@ -6938,7 +7282,11 @@ function screenWorkshopForm(){
       ? '<span class="chip st-CANCELLED">Suspended</span><span class="hint" style="margin-left:10px">Contact BHAT NETWORK to resolve this.</span>'
       : w.is_verified
         ? '<span class="chip chip-verified"><svg class="ic" aria-hidden="true"><use href="#i-shield-check"/></svg>Verified workshop</span>'
-        : '<span class="chip">Not verified yet</span><span class="hint" style="margin-left:10px">Verification is reviewed by BHAT NETWORK.</span>';
+        : w.verification_status === 'REJECTED'
+          ? `<span class="chip st-CANCELLED">Application declined</span><span class="hint" style="margin-left:10px">${w.verification_reason ? esc(w.verification_reason) : 'You can submit a new application below.'}</span>`
+          : w.verification_status === 'PENDING'
+            ? '<span class="chip chip-primary">Pending review</span><span class="hint" style="margin-left:10px">Submit or update your application below.</span>'
+            : '<span class="chip">Not verified yet</span><span class="hint" style="margin-left:10px">Verification is reviewed by BHAT NETWORK.</span>';
     $('#ws-submit').textContent = 'Save workshop details';
     if (wsFormSig !== sig){
       $('#ws-name').value = w.name || '';
@@ -6966,6 +7314,8 @@ function screenWorkshopForm(){
     }
   }
   renderWsQRPanel();
+  if (S.workshop) loadVerificationApplication(S.workshop.id);
+  renderVerificationApplication();
   renderImgBlock();
   initReceiptSettings();
 }
@@ -7728,20 +8078,24 @@ function screenAdminWorkshops(){
 async function loadAdminWorkshopDetail(id){
   if (!requireConfig() || S.adminWsLoading || !S.user) return;
   S.adminWsLoading = id; applyRoute();
-  const [w, mem] = await Promise.all([
+  const [w, mem, application] = await Promise.all([
     sb.from('workshops')
       .select('*, owner:profiles!workshops_owner_profile_id_fkey(id,full_name), services:workshop_services(id,name,category,is_active), hours:workshop_hours(day_of_week,is_open,open_time,close_time)')
       .eq('id', id).maybeSingle(),
     sb.from('workshop_members')
       .select('id,member_role,created_at,profile:profiles!workshop_members_profile_id_fkey(id,full_name)')
-      .eq('workshop_id', id).order('created_at')
+      .eq('workshop_id', id).order('created_at'),
+    sb.from('workshop_verification_applications')
+      .select('id,application_note,submitted_at,applicant_profile_id')
+      .eq('workshop_id', id).order('submitted_at', { ascending:false }).limit(1).maybeSingle()
   ]);
   S.adminWsLoading = null;
   S.adminWsDetail = {
     id,
     w: (!w.error && w.data) ? w.data : null,
     members: mem.error ? [] : (mem.data || []),
-    error: (w.error || mem.error) ? classifyError(w.error || mem.error) : null
+    application: application.error ? null : application.data,
+    error: (w.error || mem.error || application.error) ? classifyError(w.error || mem.error || application.error) : null
   };
   if (w.error) console.warn('[BHAT] admin workshop', w.error);
   if (mem.error) console.warn('[BHAT] admin members', mem.error);
@@ -7800,6 +8154,12 @@ function screenAdminWorkshop(id){
           <p>${esc(hoursSummary(w))}<small>Hours</small></p></div>
         <div class="info-row"><svg class="ic" aria-hidden="true"><use href="#i-wrench"/></svg>
           <p>${(w.services || []).length} service${(w.services || []).length === 1 ? '' : 's'} listed<small>Services</small></p></div>
+      </div>
+    </section>
+
+    <section class="home-sec"><p class="sec-label">Latest owner application</p>
+      <div class="card" style="padding:16px">
+        ${d.application ? `<p class="hint">Submitted ${esc(fmtDateTime(d.application.submitted_at))}</p>${d.application.application_note ? `<p style="margin-top:8px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(d.application.application_note)}</p>` : '<p class="muted" style="margin-top:8px">No additional note provided.</p>'}` : '<p class="muted">No workshop-facing application has been submitted yet. The existing workshop verification status and controls remain available below.</p>'}
       </div>
     </section>
 
@@ -7995,6 +8355,7 @@ const ROUTES = {
   'owner-customers': { view: 'view-wcustomers',    shell: 'owner',    auth: true },
   'wcustomer':       { view: 'view-wcustomer',     shell: 'owner',    auth: true },
   'workshop':        { view: 'view-workshop',      shell: 'owner',    auth: true },
+  'earnings':        { view: 'view-earnings',      shell: 'owner',    auth: true },
   'admin':           { view: 'view-admin',         shell: 'admin',    auth: true },
   'admin-workshops': { view: 'view-admin-workshops', shell: 'admin',  auth: true },
   'admin-workshop':  { view: 'view-admin-workshop',  shell: 'admin',  auth: true },
@@ -8014,7 +8375,7 @@ const SCREENS = {
   market: () => screenMarket(), mlisting: screenMListing,
   dashboard: screenDashboard, 'owner-bookings': screenWBookings,
   booking: screenBookingDetail, 'owner-customers': screenWCustomers,
-  wcustomer: screenWCustomerDetail, workshop: screenWorkshop,
+  wcustomer: screenWCustomerDetail, workshop: screenWorkshop, earnings: screenEarnings,
   notifications: screenNotifications,
   'complete-profile': screenComplete,
   admin: screenAdmin, 'admin-workshops': screenAdminWorkshops,
@@ -8130,6 +8491,14 @@ async function onGlobalClick(e){
       return;
     }
     if (e.target.closest('[data-receipt-retry]')){ loadReceiptForRecord(parseHash().param, true); return; }
+    const reviewRetry = e.target.closest('[data-review-retry]');
+    if (reviewRetry){
+      const bookingId = reviewRetry.dataset.reviewRetry;
+      const b = (S.booking?.id === bookingId ? S.booking : null) || S.requests.find(x => x.id === bookingId);
+      if (b){ delete S.customerReviews[bookingId]; loadCustomerReviewState(b, true); applyRoute(); }
+      return;
+    }
+    if (e.target.closest('[data-earnings-retry]')){ S.earnings = null; loadWorkshopEarnings(true); applyRoute(); return; }
     if (e.target.closest('[data-receipt-download]')){
       if (S.receipt?.status === 'ready' && S.receipt.userId === S.user?.id) window.BhatReceipt.download(S.receipt.blob, S.receipt.filename);
       return;
@@ -8607,6 +8976,10 @@ function bind(){
   preventPullToRefresh();
   document.addEventListener('click', onGlobalClick);
   document.addEventListener('change', onDocChange);
+  document.addEventListener('submit', e => {
+    if (e.target.matches('#form-service-review')) onSubmitServiceReview(e);
+    else if (e.target.matches('#form-money-entry')) onSubmitMoneyEntry(e);
+  });
   document.addEventListener('input', e => {
     const f = e.target.closest('.field');
     if (f){ f.classList.remove('has-error'); const er = f.querySelector('.field-error'); if (er) er.textContent = ''; }
@@ -8678,6 +9051,7 @@ function bind(){
   on('#form-extra','submit',onSubmitExtra);
   on('#form-record','submit',onSubmitRecord);
   on('#form-workshop','submit',onSubmitWorkshop);
+  on('#form-verification-application','submit',onSubmitVerificationApplication);
   on('#form-receipt-settings','submit',onSubmitReceiptSettings);
   on('#form-adm','submit',onSubmitAdminAction);
   on('#form-profile','submit',onSubmitProfile);

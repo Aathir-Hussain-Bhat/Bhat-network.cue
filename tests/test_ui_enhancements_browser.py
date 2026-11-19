@@ -198,6 +198,19 @@ class UIEnhancementBrowserTests(unittest.TestCase):
         self.assertTrue(all(float(d.removesuffix("s")) <= 0.01 for d in motion), motion[:10])
         self.assertTrue(self.page.locator("#dash-workshop a[href='#/owner-bookings']").is_visible())
 
+    def test_workshop_earnings_tab_is_separate_labeled_and_responsive(self):
+        self.open_app("workshop_owner", "earnings", 320)
+        self.page.locator("#form-money-entry").wait_for(timeout=8000)
+        tab = self.page.locator("#tabbar-owner a[data-route='earnings']")
+        self.assertTrue(tab.is_visible())
+        self.assertEqual(tab.get_attribute("aria-current"), "page")
+        body = self.page.locator("#earnings-body").inner_text()
+        for label in ("Completed service amounts", "Workshop-entered income", "Workshop-entered expenses", "Recorded difference"):
+            self.assertIn(label, body)
+        self.assertIn("not a payment or bank balance", self.page.locator("#view-earnings").inner_text().lower())
+        self.assertIn("not independently verified or processed", body.lower())
+        self.assert_no_horizontal_overflow()
+
     def test_scan_header_control_opens_existing_scanner_for_all_roles(self):
         for role, route, view_id in (
             ("customer", "home", "view-home"),
