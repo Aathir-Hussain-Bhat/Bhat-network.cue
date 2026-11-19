@@ -198,6 +198,26 @@ class UIEnhancementBrowserTests(unittest.TestCase):
         self.assertTrue(all(float(d.removesuffix("s")) <= 0.01 for d in motion), motion[:10])
         self.assertTrue(self.page.locator("#dash-workshop a[href='#/owner-bookings']").is_visible())
 
+    def test_scan_header_control_opens_existing_scanner_for_all_roles(self):
+        for role, route, view_id in (
+            ("customer", "home", "view-home"),
+            ("workshop_owner", "dashboard", "view-dashboard"),
+            ("admin", "admin", "view-admin"),
+        ):
+            with self.subTest(role=role):
+                self.page = self.context.new_page()
+                self.page.route("**/*", lambda request: request.continue_() if request.request.url.startswith(self.base) else request.abort())
+                self.open_app(role, route, 320)
+                scan = self.page.locator(f"#{view_id} [data-header-scan]")
+                bell = self.page.locator(f"#{view_id} a[href='#/notifications']")
+                self.assertTrue(scan.is_visible())
+                self.assertTrue(scan.evaluate("""el => el.nextElementSibling.matches('a[href="#/notifications"]')"""))
+                self.assertLess(scan.bounding_box()["x"], bell.bounding_box()["x"])
+                self.assertLessEqual(bell.bounding_box()["x"] + bell.bounding_box()["width"], 320)
+                scan.click()
+                self.page.locator("#sheet-qr-scan").wait_for(state="visible", timeout=2000)
+                self.assertIn("Scan a QR code", self.page.locator("#qr-scan-title").inner_text())
+
     def test_advertising_marquee_pause_and_reduced_motion_scroll_surface(self):
         self.open_app("workshop_owner", "dashboard", 375)
         marquee = self.page.locator("#view-dashboard .network-marquee")

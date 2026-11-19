@@ -31,6 +31,11 @@ class QRAndScrollRegressionTests(unittest.TestCase):
         self.assertIn("jsqr@1.4.0/dist/jsQR.js", HTML)
         self.assertIn("async function onQRPhotoChange(e)", HTML)
 
+    def test_customer_workshop_and_admin_headers_have_scan_before_notifications(self):
+        self.assertEqual(HTML.count('data-header-scan aria-label="Scan QR code" title="Scan QR code"'), 3)
+        self.assertEqual(HTML.count('aria-label="Scan QR code"'), 3)
+        self.assertIn("if (e.target.closest('[data-header-scan],[data-qr-scan]')){ openQRScanner(); return; }", HTML)
+
     def test_scanned_app_qr_routes_in_app_and_external_link_requires_tap(self):
         body = self.function_body("function handleScannedQR(value)", "function classifyError(err)")
         self.assertIn("url.origin === appUrl.origin", body)
