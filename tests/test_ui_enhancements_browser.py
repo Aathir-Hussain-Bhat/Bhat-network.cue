@@ -74,6 +74,7 @@ RECORD = {
 LISTING = {
     "id": "listing-ui-synthetic", "title": "Genuine brake pads", "description": "Synthetic listing",
     "category": "parts", "price": 1200, "status": "ACTIVE",
+    "photo_urls": ["./assets/ads/1000189968.jpg", "./assets/ads/1000189967.jpg"],
     "workshop": {"id": WORKSHOP_ID, "name": WORKSHOP["name"]},
 }
 
@@ -116,16 +117,19 @@ class UIEnhancementBrowserTests(unittest.TestCase):
     def tearDown(self):
         self.context.close()
 
-    def open_app(self, role="workshop_owner", route="dashboard", width=375):
+    def open_app(self, role="workshop_owner", route="dashboard", width=375, created_at="2026-01-01T00:00:00Z"):
         self.page.set_viewport_size({"width": width, "height": 812})
-        fixture = {"role": role, "owner": OWNER_ID, "customer": CUSTOMER_ID,
+        fixture = {"role": role, "owner": OWNER_ID, "customer": CUSTOMER_ID, "admin": "admin-ui-synthetic",
+                   "created_at": created_at,
                    "workshop": WORKSHOP, "bookings": [REQUESTED, SCHEDULED],
                    "records": [RECORD], "listings": [LISTING]}
         script = r"""
 (() => {
   const f = __FIXTURE__;
-  const userId = f.role === 'workshop_owner' ? f.owner : f.customer;
-  const profile = {id: userId, role: f.role, full_name: f.role === 'workshop_owner' ? 'Owner Responsive' : f.customer === 'customer-ui-synthetic' ? 'Asha Responsive' : 'Bharat Responsive', phone: '6000000000', onboarding_complete: true};
+  window.__listingInsertCalls = 0;
+  const userId = f.role === 'workshop_owner' ? f.owner : f.role === 'admin' ? f.admin : f.customer;
+  const fullName = f.role === 'workshop_owner' ? 'Owner Responsive' : f.role === 'admin' ? 'Admin Responsive' : 'Asha Responsive';
+  const profile = {id: userId, role: f.role, full_name: fullName, created_at: f.created_at, phone: '6000000000', onboarding_complete: true};
   const ok = data => Promise.resolve({data, error: null});
   const rows = table => {
     if (table === 'profiles') return [profile];
@@ -157,7 +161,7 @@ class UIEnhancementBrowserTests(unittest.TestCase):
       lt: (...x) => { op.filters.push(['lt', x]); return b; }, neq: () => b, or: () => b,
       order: () => b, limit: () => b, range: () => b, filter: () => b,
       maybeSingle: () => run(op, 'maybeSingle'), single: () => run(op, 'single'),
-      insert: value => { op.insert = value; return b; }, update: value => { op.update = value; return b; },
+      insert: value => { op.insert = value; if (table === 'marketplace_listings') window.__listingInsertCalls++; return b; }, update: value => { op.update = value; return b; },
       then: (resolve, reject) => run(op, 'list').then(resolve, reject),
     };
     return b;
@@ -196,9 +200,9 @@ class UIEnhancementBrowserTests(unittest.TestCase):
 
     def test_advertising_marquee_pause_and_reduced_motion_scroll_surface(self):
         self.open_app("workshop_owner", "dashboard", 375)
-        marquee = self.page.locator(".network-marquee")
+        marquee = self.page.locator("#view-dashboard .network-marquee")
         marquee.wait_for(timeout=8000)
-        self.assertIn("Advertising", self.page.locator("#network-preview-title").inner_text())
+        self.assertIn("Advertising", self.page.locator("#view-dashboard .network-ad-section .sec-label").inner_text())
         ads = marquee.locator(".network-marquee-group:not([aria-hidden='true']) img.network-ad-image")
         self.assertEqual(ads.count(), 3)
         self.assertEqual([ads.nth(i).get_attribute("src").rsplit("/", 1)[-1] for i in range(3)],
@@ -212,7 +216,7 @@ class UIEnhancementBrowserTests(unittest.TestCase):
         self.assertEqual(marquee.locator(".network-marquee-group[aria-hidden='true']").count(), 1)
         self.assertGreater(self.page.evaluate("el => el.scrollWidth", marquee.element_handle()),
                            self.page.evaluate("el => el.clientWidth", marquee.element_handle()))
-        pause = self.page.locator("[data-network-pause]")
+        pause = self.page.locator("#view-dashboard [data-network-pause]")
         self.assertEqual(pause.get_attribute("aria-pressed"), "false")
         pause.scroll_into_view_if_needed()
         self.page.emulate_media(reduced_motion="no-preference")
@@ -231,6 +235,57 @@ class UIEnhancementBrowserTests(unittest.TestCase):
         self.assertEqual(pause.inner_text(), "Pause")
         self.assertEqual(track.evaluate("el => getComputedStyle(el).animationPlayState"), "running")
         self.assert_no_horizontal_overflow()
+
+    def test_advertising_is_available_for_old_and_new_accounts_in_each_role_home(self):
+        cases = [
+            ("customer", "home", "2020-01-01T00:00:00Z", "#view-home"),
+            ("customer", "home", "2026-11-19T00:00:00Z", "#view-home"),
+            ("workshop_owner", "dashboard", "2020-01-01T00:00:00Z", "#view-dashboard"),
+            ("workshop_owner", "dashboard", "2026-11-19T00:00:00Z", "#view-dashboard"),
+            ("admin", "admin", "2026-11-19T00:00:00Z", "#view-admin"),
+        ]
+        for index, (role, route, created_at, view) in enumerate(cases):
+            with self.subTest(role=role, created_at=created_at):
+                if index:
+                    self.page = self.context.new_page()
+                    self.page.route("**/*", lambda req: req.continue_() if req.request.url.startswith(self.base) else req.abort())
+                self.open_app(role, route, 375, created_at)
+                marquee = self.page.locator(f"{view} .network-marquee")
+                marquee.wait_for(timeout=8000)
+                self.assertTrue(marquee.is_visible())
+                self.assertEqual(marquee.locator(".network-marquee-group:not([aria-hidden='true']) .network-ad-image").count(), 3)
+
+    def test_product_images_are_fully_visible_in_cards_and_listing_gallery(self):
+        self.open_app("workshop_owner", "dashboard", 375)
+        card_image = self.page.locator("#dash-market-sec .prod-img img").first
+        card_image.wait_for(timeout=8000)
+        self.assertEqual(card_image.evaluate("img => getComputedStyle(img).objectFit"), "contain")
+        self.page.locator("#dash-market-sec .prod-card").first.click()
+        hero_image = self.page.locator("#mlisting-body .mld-hero img")
+        hero_image.wait_for(timeout=8000)
+        self.assertEqual(hero_image.evaluate("img => getComputedStyle(img).objectFit"), "contain")
+        thumbnails = self.page.locator("#mlisting-body .thumbs img")
+        self.assertEqual(thumbnails.count(), 2)
+        self.assertTrue(all(thumbnails.nth(i).evaluate("img => getComputedStyle(img).objectFit") == "contain" for i in range(2)))
+
+    def test_listing_titles_allow_18_words_and_block_19_before_database_write(self):
+        self.open_app("workshop_owner", "dashboard", 375)
+        self.page.locator("#dm-own [data-dash-listings]").click()
+        add_listing = self.page.locator("#listings-wrap [data-open-sheet='sheet-listing']")
+        add_listing.wait_for(timeout=8000)
+        add_listing.click()
+        title = self.page.locator("#li-title")
+        over_limit = " ".join(["component"] * 19)
+        title.fill(over_limit)
+        self.assertEqual(self.page.locator("#li-title-count").inner_text(), "19 / 18 words")
+        self.page.locator("#li-submit").click()
+        self.assertIn("18 words or fewer", self.page.locator("#form-listing .field-error").first.inner_text())
+        self.assertEqual(self.page.evaluate("window.__listingInsertCalls"), 0)
+        allowed = " ".join(["syntheticpart"] * 18)
+        title.fill(allowed)
+        self.assertEqual(self.page.locator("#li-title-count").inner_text(), "18 / 18 words")
+        self.page.locator("#li-submit").click()
+        self.page.wait_for_function("() => window.__listingInsertCalls === 1", timeout=3000)
 
     def test_customer_cards_keep_data_and_navigation_on_narrow_view(self):
         self.open_app("workshop_owner", "owner-customers", 375)

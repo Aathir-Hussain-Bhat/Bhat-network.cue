@@ -505,23 +505,25 @@ a.p-row:hover{background:#FBF7EC}
 .prod-card{overflow:hidden;text-decoration:none;color:inherit;display:flex;flex-direction:column;transition:transform .16s ease}
 .prod-card:hover{transform:translateY(-2px)}
 .prod-img{aspect-ratio:4/3;background:var(--surface-2);display:grid;place-items:center;color:var(--teal);overflow:hidden}
-.prod-img img{width:100%;height:100%;object-fit:cover}
+.prod-img img{width:100%;height:100%;object-fit:contain}
 .prod-body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:5px;flex:1}
 .prod-body h3{font:600 15px var(--f-display);color:var(--navy);line-height:1.3}
 .prod-price{font:700 15px var(--f-body);color:var(--saffron-deep)}
 .prod-sub{font-size:12.5px;color:var(--ink-2);font-weight:600}
+.title-word-count{font-size:12.5px;font-weight:600;color:var(--ink-2);text-align:right}
+.title-word-count.is-over-limit{color:var(--danger)}
 .stock-yes{color:var(--success)}
 .stock-no{color:var(--ink-2)}
 .mld-hero{width:100%;aspect-ratio:4/3;border-radius:22px;overflow:hidden;background:var(--surface-2);display:grid;place-items:center;color:var(--teal)}
-.mld-hero img{width:100%;height:100%;object-fit:cover}
+.mld-hero img{width:100%;height:100%;object-fit:contain}
 .thumbs{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 4px;scrollbar-width:none}
 .thumbs::-webkit-scrollbar{display:none}
 .thumbs button{flex:none;width:64px;height:64px;border-radius:14px;overflow:hidden;border:2px solid var(--line);background:var(--surface-2);padding:0}
 .thumbs button[aria-current="true"]{border-color:var(--saffron)}
-.thumbs img{width:100%;height:100%;object-fit:cover}
+.thumbs img{width:100%;height:100%;object-fit:contain}
 .imgmini{display:flex;gap:8px;flex-wrap:wrap}
 .imgmini .im{position:relative;width:72px;height:72px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
-.imgmini img{width:100%;height:100%;object-fit:cover}
+.imgmini img{width:100%;height:100%;object-fit:contain}
 .imgmini .rm{position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;background:rgba(9,44,53,.65);color:#F7F3EA;display:grid;place-items:center}
 .imgmini .rm .ic{width:12px;height:12px}
 
@@ -1132,6 +1134,8 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
         </div>
       </header>
 
+      <div id="home-advertising" data-network-ad-slot></div>
+
       <section class="home-sec">
         <div class="sec-top"><p class="sec-label">Your vehicle</p><a class="link-row" style="margin-top:0" href="#/vehicles">All vehicles <svg class="ic" aria-hidden="true"><use href="#i-chev-r"/></svg></a></div>
         <div id="home-vehicle" class="stack"></div>
@@ -1424,6 +1428,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
           <a class="home-avatar" href="#/profile" aria-label="Profile">A</a>
         </div>
       </header>
+      <div id="admin-advertising" data-network-ad-slot></div>
       <div id="admin-body" class="stack"></div>
     </div>
   </section>
@@ -1547,8 +1552,8 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
         <div id="dm-listings" class="stack"></div>
       </section>
 
-      <section class="home-sec" aria-labelledby="network-preview-title">
-        <div class="sec-top"><p class="sec-label" id="network-preview-title">Advertising</p><button class="network-pause" type="button" data-network-pause aria-pressed="false" aria-label="Pause advertising banners">Pause</button></div>
+      <section class="home-sec network-ad-section" aria-label="Advertising">
+        <div class="sec-top"><p class="sec-label">Advertising</p><button class="network-pause" type="button" data-network-pause aria-pressed="false" aria-label="Pause advertising banners">Pause</button></div>
         <div class="network-marquee" aria-label="Aashaq Bike Point advertisements">
           <div class="network-marquee-track">
             <div class="network-marquee-group">
@@ -2190,8 +2195,9 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
       <input type="file" id="file-limgs" accept="image/*" multiple hidden>
       <div class="form-grid">
         <div class="field">
-          <label for="li-title">Listing title</label>
-          <input id="li-title" type="text" maxlength="120" placeholder="e.g. Synthetic engine oil 5W-30 (3.5L)">
+          <label for="li-title">Listing title <span class="muted">(max 18 words)</span></label>
+          <input id="li-title" type="text" placeholder="e.g. Synthetic engine oil 5W-30 (3.5L)">
+          <span class="title-word-count" id="li-title-count">0 / 18 words</span>
           <span class="field-error" aria-live="polite"></span>
         </div>
         <div class="form-grid two">
@@ -2579,7 +2585,7 @@ body:not([data-shell="public"]) #app{padding-bottom:calc(104px + env(safe-area-i
 const SUPABASE_URL = 'https://hmbpikrgbgtgdmciwmpz.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_LbdWJxql3krR-1e7S9M6rw_385QpWxz';
 const APP_LOGO = './assets/branding/bhat-network-512.png';
-const APP_VERSION = 'v0.13.0';
+const APP_VERSION = 'v0.13.1';
 
 const sb = window.supabase
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -7345,6 +7351,18 @@ function renderListingImgs(){
     </span>`).join('');
 }
 
+function listingTitleWordCount(value){
+  const normalized = String(value || '').trim();
+  return normalized ? normalized.split(/\s+/u).length : 0;
+}
+function updateListingTitleWordCount(){
+  const input = $('#li-title'), counter = $('#li-title-count');
+  if (!input || !counter) return;
+  const words = listingTitleWordCount(input.value);
+  counter.textContent = `${words} / 18 words`;
+  counter.classList.toggle('is-over-limit', words > 18);
+}
+
 function openListingSheet(id = null){
   if (!S.workshop){ toast('Add your workshop first.', 'info'); return; }
   S.listEditId = id;
@@ -7374,6 +7392,7 @@ function openListingSheet(id = null){
     $('#li-active').checked = true;
   }
   renderListingImgs();
+  updateListingTitleWordCount();
   openOverlay($('#sheet-listing'));
   setTimeout(() => $('#li-title')?.focus(), 140);
 }
@@ -7419,6 +7438,7 @@ async function onSubmitListing(e){
         stock = $('#li-stock').checked, active = $('#li-active').checked;
   let ok = true;
   if (title.length < 2){ fieldError($('#li-title'), 'Please enter a listing title.'); ok = false; }
+  if (listingTitleWordCount(title) > 18){ fieldError($('#li-title'), 'Use 18 words or fewer for the listing title.'); ok = false; }
   const price = priceRaw ? Number(priceRaw) : null;
   if (priceRaw && (Number.isNaN(price) || price < 0)){ fieldError($('#li-price'), 'Enter a valid price.'); ok = false; }
   const cyf = cyfRaw ? parseInt(cyfRaw, 10) : null;
@@ -8085,7 +8105,7 @@ async function onGlobalClick(e){
       pauseAd.setAttribute('aria-pressed', String(paused));
       pauseAd.setAttribute('aria-label', paused ? 'Resume advertising banners' : 'Pause advertising banners');
       pauseAd.textContent = paused ? 'Play' : 'Pause';
-      document.querySelector('.network-marquee')?.classList.toggle('is-paused', paused);
+      pauseAd.closest('.network-ad-section')?.querySelector('.network-marquee')?.classList.toggle('is-paused', paused);
       return;
     }
     const bookingReceipt = e.target.closest('[data-booking-receipt]');
@@ -8642,6 +8662,7 @@ function bind(){
   on('#form-quick','submit',onSubmitQuick);
   on('#form-service','submit',onSubmitService);
   on('#form-listing','submit',onSubmitListing);
+  on('#li-title','input',updateListingTitleWordCount);
   on('#form-schedule','submit',onSubmitSchedule);
   on('#form-intake','submit',onSubmitIntake);
   on('#form-extra','submit',onSubmitExtra);
@@ -8767,8 +8788,15 @@ async function initServiceWorker(){
 
 function showSplash(){ const sp = $('#splash'); sp.hidden = false; sp.classList.remove('is-hidden'); }
 function hideSplash(){ const sp = $('#splash'); if (sp.hidden) return; sp.classList.add('is-hidden'); setTimeout(() => { sp.hidden = true; }, 320); }
-
+function mountNetworkAds(){
+  const source = document.querySelector('.network-ad-section');
+  if (!source) return;
+  document.querySelectorAll('[data-network-ad-slot]').forEach(slot => {
+    slot.replaceChildren(source.cloneNode(true));
+  });
+}
 async function boot(){
+  mountNetworkAds();
   fillSelects();
   initServiceWorker().catch(err => console.warn('[BHAT] PWA init skipped:', err));
   updateInstallRow();
