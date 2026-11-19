@@ -40,6 +40,23 @@ class ProfileAndWorkshopRegressionTests(unittest.TestCase):
         self.assertHtmlContains("val('pf-name')", "Profile save should read the editable name input.")
         self.assertHtmlContains("district: district || null, area: area || null", "Profile save should include location fields.")
 
+    def test_profile_is_removed_from_bottom_navigation_but_kept_in_header(self):
+        expected_routes = {
+            "tabbar-customer": ["home", "vehicles", "nearby", "bookings"],
+            "tabbar-owner": ["dashboard", "owner-bookings", "owner-customers", "workshop", "earnings"],
+        }
+        for nav_id, expected in expected_routes.items():
+            match = re.search(rf'<nav id="{nav_id}"[^>]*>(.*?)</nav>', HTML, re.S)
+            self.assertIsNotNone(match, f"Expected navigation container {nav_id}.")
+            nav_html = match.group(1)
+            actual = re.findall(r'<a class="tab"[^>]*data-route="([^"]+)"', nav_html)
+            self.assertEqual(actual, expected, f"Keep the other tabs in {nav_id} unchanged.")
+            self.assertNotIn('href="#/profile"', nav_html)
+
+        self.assertHtmlContains('<a class="home-avatar" id="home-avatar" href="#/profile"', "Customer profile access must remain in the header.")
+        self.assertHtmlContains('<a class="home-avatar" id="dash-avatar" href="#/profile"', "Workshop-owner profile access must remain in the header.")
+        self.assertHtmlContains('<a class="home-avatar" href="#/profile" aria-label="Profile">', "Admin profile access must remain in the header.")
+
     def test_onboarding_back_buttons_are_delegated_to_step_navigation(self):
         back_roles = [attrs.get("data-back") for tag, attrs in self.dom.elements
                       if tag == "button" and "data-back" in attrs]
