@@ -1,7 +1,7 @@
 """Offline responsive/browser regressions for the current static Bhat Network app.
 
-The app has no literal advertising/banner component at this revision. The
-owner-dashboard feature banner is therefore covered through ``.feat-card`` and
+The app has an advertising marquee. The
+owner-dashboard feature banner is also covered through ``.feat-card`` and
 its adjacent marketplace surface (``#dash-market-sec``). All records below are
 synthetic and served by an in-page Supabase-shaped fake; no account or project
 is contacted.
