@@ -73,6 +73,7 @@ class QRBrowserTests(unittest.TestCase):
         for kind, attribute, identifier, expected_hash in (
             ('vehicle', 'data-qr-vehicle', 'test-vehicle-token', '#/passport/test-vehicle-token'),
             ('workshop', 'data-qr-shop', '00000000-0000-4000-8000-000000000001', '#/shop/00000000-0000-4000-8000-000000000001'),
+            ('receipt', 'data-qr-receipt', 'record-synthetic-0001', '#/record/record-synthetic-0001'),
         ):
             with self.subTest(kind=kind):
                 self.page.evaluate('''([attribute, identifier]) => {
@@ -152,6 +153,22 @@ class QRBrowserTests(unittest.TestCase):
         self.page.locator('#qr-scan-file').set_input_files({'name': 'test.png', 'mimeType': 'image/png', 'buffer': png})
         self.page.wait_for_url('**/#/passport/scan-test-token', timeout=10000)
         self.assertTrue(self.page.url.endswith('#/passport/scan-test-token'))
+        self.page.evaluate('''() => {
+            const button = document.createElement('button');
+            button.setAttribute('data-qr-receipt', 'record-synthetic-0001');
+            document.body.appendChild(button);
+            button.click();
+        }''')
+        receipt_image = self.page.locator('#qr-frame img')
+        receipt_image.wait_for(state='visible', timeout=5000)
+        receipt_png = base64.b64decode(receipt_image.get_attribute('src').split(',', 1)[1], validate=True)
+        decoded, points, _ = cv2.QRCodeDetector().detectAndDecode(cv2.imdecode(np.frombuffer(receipt_png, dtype=np.uint8), cv2.IMREAD_COLOR))
+        self.assertIsNotNone(points, 'receipt QR must contain a recognizable code')
+        self.assertEqual(decoded, self.base + '#/record/record-synthetic-0001')
+        self.page.locator('[data-qr-scan]').click()
+        self.page.locator('#qr-scan-file').set_input_files({'name': 'receipt.png', 'mimeType': 'image/png', 'buffer': receipt_png})
+        self.page.wait_for_url('**/#/signin', timeout=10000)
+        self.assertEqual(self.page.evaluate("() => sessionStorage.getItem('bhat-network:receipt-return')"), '#/record/record-synthetic-0001')
 
 
 if __name__ == '__main__':

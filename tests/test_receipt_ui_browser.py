@@ -101,10 +101,11 @@ class ReceiptUIBrowserTests(unittest.TestCase):
     def tearDown(self):
         self.context.close()
 
-    def open_app(self, role="customer", receipt="ready"):
+    def open_app(self, role="customer", receipt="ready", authenticated=True, route=None):
         fixture = {
             "role": role,
             "receipt": receipt,
+            "authenticated": authenticated,
             "snapshot": SNAPSHOT,
             "record": RECORD,
             "booking": BOOKING,
@@ -113,11 +114,13 @@ class ReceiptUIBrowserTests(unittest.TestCase):
         fixture_json = json.dumps(fixture)
         self.page.add_init_script(script="""
             (() => {
-              const {role, receipt, snapshot, record, booking, calls} = __FIXTURE__;
-              window.__fixture = {role, receipt, snapshot, record, booking, calls};
+              const {role, receipt, authenticated, snapshot, record, booking, calls} = __FIXTURE__;
+              window.__fixture = {role, receipt, authenticated, snapshot, record, booking, calls};
               window.__shareCalls = 0;
               window.__downloadCalls = 0;
               const userId = role === 'workshop_owner' ? 'owner-synthetic-0001' : 'customer-synthetic-0001';
+              const user = {id: userId, user_metadata: {full_name: role === 'workshop_owner' ? 'Owner Synthetic' : 'Asha Synthetic', role}};
+              let isAuthenticated = authenticated, authListener = null;
               const profile = {id: userId, role, full_name: role === 'workshop_owner' ? 'Owner Synthetic' : 'Asha Synthetic',
                                phone: '6000000000', onboarding_complete: true};
               const workshop = {id: 'workshop-synthetic-0001', name: 'Synthetic Motors', owner_profile_id: userId,
@@ -167,7 +170,11 @@ class ReceiptUIBrowserTests(unittest.TestCase):
                 return result([]);
               }
               window.supabase = {createClient: () => ({
-                auth: {onAuthStateChange: cb => { setTimeout(() => cb('INITIAL_SESSION', {user: {id: userId, user_metadata: {full_name: profile.full_name, role}}}), 0); return {data: {subscription: {unsubscribe(){}}}}; }, signOut: async () => result(null)},
+                auth: {
+                  onAuthStateChange: cb => { authListener = cb; setTimeout(() => cb('INITIAL_SESSION', isAuthenticated ? {user} : null), 0); return {data: {subscription: {unsubscribe(){}}}}; },
+                  signInWithPassword: async () => { isAuthenticated = true; window.__fixture.authenticated = true; authListener?.('SIGNED_IN', {user}); return {error: null}; },
+                  signOut: async () => result(null)
+                },
                 from: builder,
                 rpc,
               })};
@@ -175,8 +182,12 @@ class ReceiptUIBrowserTests(unittest.TestCase):
               Object.defineProperty(navigator, 'canShare', {configurable: true, value: () => true});
             })()
         """.replace("__FIXTURE__", fixture_json))
-        self.page.goto(self.base + "#/record/" + RECORD_ID, wait_until="load")
-        self.page.locator("#record-body").get_by_text("Private service receipt", exact=True).wait_for(timeout=8000) if receipt == "ready" else self.page.locator("#record-body").wait_for(timeout=8000)
+        target = route or ("#/record/" + RECORD_ID)
+        self.page.goto(self.base + target, wait_until="load")
+        if authenticated:
+            self.page.locator("#record-body").get_by_text("Private service receipt", exact=True).wait_for(timeout=8000) if receipt == "ready" else self.page.locator("#record-body").wait_for(timeout=8000)
+        else:
+            self.page.locator("#view-signin").wait_for(state="visible", timeout=8000)
 
     def calls(self):
         return self.page.evaluate("() => window.__fixture.calls")
@@ -184,6 +195,7 @@ class ReceiptUIBrowserTests(unittest.TestCase):
     def test_customer_record_uses_private_snapshot_and_exact_receipt_actions(self):
         self.open_app()
         body = self.page.locator("#record-body")
+        self.assertEqual(body.locator("[data-qr-receipt]").count(), 1)
         for exact in (SNAPSHOT["service"]["work_performed"], SNAPSHOT["service"]["parts"], "₹8,750", SNAPSHOT["service"]["notes"], SNAPSHOT["message"]):
             self.assertIn(exact, body.inner_text())
         self.assertEqual(self.page.evaluate("() => window.__shareCalls"), 0)
@@ -202,6 +214,7 @@ class ReceiptUIBrowserTests(unittest.TestCase):
         panel = self.page.locator("#record-receipt-panel")
         self.assertIn("No PDF receipt for this older service", panel.inner_text())
         self.assertEqual(panel.locator("[data-receipt-download]").count(), 0)
+        self.assertEqual(panel.locator("[data-qr-receipt]").count(), 0)
 
     def test_receipt_error_state_is_explicit_and_retryable(self):
         self.open_app(receipt="error")
@@ -214,6 +227,27 @@ class ReceiptUIBrowserTests(unittest.TestCase):
         self.page.goto(self.base + "#/record/" + RECORD_ID, wait_until="load")
         self.assertTrue(self.page.url.endswith("#/record/" + RECORD_ID))
         self.page.locator("#record-body").get_by_text("Brake overhaul", exact=True).wait_for(timeout=8000)
+
+    def test_private_receipt_deep_link_survives_sign_in(self):
+        self.open_app(authenticated=False, route="#/record/" + RECORD_ID)
+        self.page.wait_for_url("**/#/signin", timeout=8000)
+        self.assertEqual(self.page.evaluate("() => sessionStorage.getItem('bhat-network:receipt-return')"), "#/record/" + RECORD_ID)
+        self.page.locator("#si-email").fill("customer@synthetic.invalid")
+        self.page.locator("#si-password").fill("synthetic-password")
+        self.page.locator("#si-submit").click()
+        self.page.wait_for_url("**/#/record/" + RECORD_ID, timeout=8000)
+        self.page.locator("#record-body").get_by_text("Private service receipt", exact=True).wait_for(timeout=8000)
+        self.assertIsNone(self.page.evaluate("() => sessionStorage.getItem('bhat-network:receipt-return')"))
+
+    def test_malformed_receipt_return_cannot_redirect_outside_the_app(self):
+        self.open_app(authenticated=False, route="#/record/%2F%2Fevil.example")
+        self.page.wait_for_url("**/#/signin", timeout=8000)
+        self.assertIsNone(self.page.evaluate("() => sessionStorage.getItem('bhat-network:receipt-return')"))
+        self.page.locator("#si-email").fill("customer@synthetic.invalid")
+        self.page.locator("#si-password").fill("synthetic-password")
+        self.page.locator("#si-submit").click()
+        self.page.wait_for_url("**/#/home", timeout=8000)
+        self.assertNotIn("evil.example", self.page.url)
 
     def test_completion_uses_atomic_rpc_and_does_not_auto_send_message(self):
         self.open_app(role="workshop_owner", receipt="missing")

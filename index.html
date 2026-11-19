@@ -2870,6 +2870,30 @@ function recordLink(token){
 function workshopLink(id){
   return appBase() + '#/shop/' + id;
 }
+function privateReceiptLink(recordId){
+  return appBase() + '#/record/' + encodeURIComponent(String(recordId || ''));
+}
+const RECEIPT_RETURN_KEY = 'bhat-network:receipt-return';
+function safeReceiptReturnHash(value){
+  const route = String(value || '').replace(/^#/, '').replace(/^\/+/, '');
+  const match = /^record\/([A-Za-z0-9_-]{1,64})$/.exec(route);
+  return match ? '#/record/' + match[1] : '';
+}
+function rememberReceiptReturnRoute(){
+  const route = safeReceiptReturnHash(location.hash);
+  if (!route) return;
+  try { sessionStorage.setItem(RECEIPT_RETURN_KEY, route); } catch {}
+}
+function takeReceiptReturnRoute(){
+  try {
+    const route = safeReceiptReturnHash(sessionStorage.getItem(RECEIPT_RETURN_KEY));
+    sessionStorage.removeItem(RECEIPT_RETURN_KEY);
+    return route;
+  } catch { return ''; }
+}
+function clearReceiptReturnRoute(){
+  try { sessionStorage.removeItem(RECEIPT_RETURN_KEY); } catch {}
+}
 function storagePathFromUrl(url, bucket){
   try {
     const marker = '/object/public/' + bucket + '/';
@@ -3789,6 +3813,7 @@ function startAuthListener(){
     S.user = session?.user ?? null;
     try {
       if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !S.user)){
+        if (event === 'SIGNED_OUT') clearReceiptReturnRoute();
         const hadUser = routingKey !== 'anon';
         routingKey = 'anon';
         S.booted = true; S.bootedOnce = true;
@@ -3893,7 +3918,14 @@ async function routeSession(force = false){
   if (!S.profile.onboarding_complete){
     hideSplash(); applyRoute(); prepOnboarding(); return;
   }
-  hideSplash(); applyRoute();
+  hideSplash();
+  const receiptReturn = String(S.profile.phone || '').trim() ? takeReceiptReturnRoute() : '';
+  if (receiptReturn){
+    goHash(receiptReturn.slice(2));
+    loadRoleData();
+    return;
+  }
+  applyRoute();
   loadRoleData();
 }
 
@@ -4698,10 +4730,11 @@ function receiptPanelHTML(receipt){
     <p class="hint" style="margin:8px 0">${esc(receipt.snapshot.message || '')}</p>
     <p class="hint">Only you and the authorized workshop can open this receipt in the app. If you share the PDF, the recipient can keep a copy.</p>
     <div class="p-cta" style="margin-top:12px">
+      <button class="btn btn-primary" type="button" data-qr-receipt="${esc(receipt.recordId)}">Show private receipt QR</button>
       <button class="btn btn-primary" type="button" data-receipt-share>Share PDF / WhatsApp</button>
       <button class="btn btn-ghost" type="button" data-receipt-download>Download PDF</button>
     </div>
-    <p class="hint" style="margin-top:8px">Choose WhatsApp in your device&rsquo;s share sheet. Nothing is sent automatically.</p>
+    <p class="hint" style="margin-top:8px">The QR opens this specific receipt in BHAT NETWORK. Only the customer and authorized workshop can view it; signing in may be required. Choose WhatsApp in your device&rsquo;s share sheet to share a PDF; nothing is sent automatically.</p>
   </div>`;
 }
 
@@ -5754,7 +5787,8 @@ async function onSubmitComplete(e){
     S.profile = res.data;
     f.dataset.loaded = '';
     toast('Thanks — your account is complete', 'success');
-    redirect(roleHome());
+    const receiptReturn = takeReceiptReturnRoute();
+    if (receiptReturn) goHash(receiptReturn.slice(2)); else redirect(roleHome());
   } catch (err){ toast(friendlyError(err), 'error'); }
   finally { setBusy(btn, false); }
 }
@@ -7966,7 +8000,10 @@ function applyRoute(){
   const role = S.profile?.role;
 
   if (S.user && S.profileError && name !== 'error') return redirect('error');
-  if (r.auth && !authed) return redirect(S.user && S.profileError ? 'error' : 'signin');
+  if (r.auth && !authed){
+    if (name === 'record') rememberReceiptReturnRoute();
+    return redirect(S.user && S.profileError ? 'error' : 'signin');
+  }
   if (authed && !r.allowAuthed){
     if (!r.auth) return redirect(roleHome());
     if (name === 'onboarding' && S.profile.onboarding_complete) return redirect(roleHome());
@@ -8015,6 +8052,15 @@ async function onGlobalClick(e){
     }
     const bookingReceipt = e.target.closest('[data-booking-receipt]');
     if (bookingReceipt){ openReceiptForBooking(bookingReceipt.dataset.bookingReceipt); return; }
+    const receiptQr = e.target.closest('[data-qr-receipt]');
+    if (receiptQr){
+      const id = receiptQr.dataset.qrReceipt;
+      if (!id) return;
+      openQRSheet({ url: privateReceiptLink(id), title: 'Private service receipt',
+        sub: 'Open this specific service record and its private receipt.', kind: 'receipt',
+        note: 'This QR does not make the receipt public. Sign in as the customer or an authorized workshop member to view it.' });
+      return;
+    }
     if (e.target.closest('[data-receipt-retry]')){ loadReceiptForRecord(parseHash().param, true); return; }
     if (e.target.closest('[data-receipt-download]')){
       if (S.receipt?.status === 'ready' && S.receipt.userId === S.user?.id) window.BhatReceipt.download(S.receipt.blob, S.receipt.filename);
