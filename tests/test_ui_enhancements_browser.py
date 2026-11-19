@@ -199,6 +199,15 @@ class UIEnhancementBrowserTests(unittest.TestCase):
         marquee = self.page.locator(".network-marquee")
         marquee.wait_for(timeout=8000)
         self.assertIn("Advertising", self.page.locator("#network-preview-title").inner_text())
+        ads = marquee.locator(".network-marquee-group:not([aria-hidden='true']) img.network-ad-image")
+        self.assertEqual(ads.count(), 3)
+        self.assertEqual([ads.nth(i).get_attribute("src").rsplit("/", 1)[-1] for i in range(3)],
+                         ["1000189968.jpg", "1000189967.jpg", "1000189969.jpg"])
+        self.page.wait_for_function("""() => [...document.querySelectorAll(
+          '.network-marquee-group:not([aria-hidden="true"]) .network-ad-image'
+        )].every(img => img.complete && img.naturalWidth > 0)""", timeout=8000)
+        self.assertLessEqual(ads.first.evaluate("img => img.getBoundingClientRect().width"),
+                             self.page.evaluate("window.innerWidth"))
         self.assertEqual(marquee.locator(".network-marquee-group").count(), 2)
         self.assertEqual(marquee.locator(".network-marquee-group[aria-hidden='true']").count(), 1)
         self.assertGreater(self.page.evaluate("el => el.scrollWidth", marquee.element_handle()),
