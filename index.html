@@ -5679,7 +5679,8 @@ function serviceReviewSectionHTML(b){
 async function onSubmitServiceReview(e){
   e.preventDefault();
   if (!requireConfig() || !S.user || S.profile?.role !== 'customer') return;
-  const form = e.currentTarget;
+  const form = e.target;
+  if (!(form instanceof HTMLFormElement) || form.id !== 'form-service-review') return;
   const bookingId = form.dataset.bookingId;
   const b = (S.booking?.id === bookingId ? S.booking : null) || S.requests.find(x => x.id === bookingId);
   const state = S.customerReviews[bookingId];
